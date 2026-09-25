@@ -1,0 +1,22 @@
+# Environment & Secret Configurations
+config.php
+
+# Ephemeral File Cache
+cache/
+cache/inspections/
+
+# Logs & Temporary Files
+*.log
+tmp/
+temp/
+
+# OS Metadata
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# IDE & Editor Directories
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
