@@ -33,6 +33,18 @@ export class NotesManager {
     if (this.nextStepsEl) {
       this.nextStepsEl.addEventListener('input', () => this.handleInput());
     }
+    if (this.backdropEl) {
+      this.backdropEl.addEventListener('click', () => this.close());
+    }
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && this.isOpen()) {
+        this.close();
+      }
+    });
+  }
+
+  isOpen() {
+    return this.panelEl && this.panelEl.classList.contains('translate-x-0');
   }
 
   async open(repoId = 0, repoName = '') {

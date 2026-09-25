@@ -12,6 +12,10 @@ declare(strict_types=1);
  * - Standardized JSON API responses
  */
 
+// Disable error display in output stream to guarantee pure JSON responses
+error_reporting(E_ALL);
+ini_set('display_errors', '0');
+
 header('Content-Type: application/json; charset=utf-8');
 header('X-Content-Type-Options: nosniff');
 header('X-Frame-Options: DENY');

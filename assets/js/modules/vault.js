@@ -17,6 +17,12 @@ export class VaultModule {
     this.dbAvailable = true;
   }
 
+  toggleRevealAll() {
+    this.revealAll = !this.revealAll;
+    this.render();
+    return this.revealAll;
+  }
+
   async loadVault() {
     const container = document.getElementById('vaultContainer');
     if (!container) return;

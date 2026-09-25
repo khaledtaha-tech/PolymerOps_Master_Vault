@@ -169,15 +169,33 @@ class PolymerOpsApp {
     }
 
     // Toggle Grid vs List
+    const updateViewButtons = (mode) => {
+      const listBtn = document.getElementById('btnViewList');
+      const gridBtn = document.getElementById('btnViewGrid');
+      if (listBtn) {
+        listBtn.classList.toggle('bg-[#30363d]', mode === 'list');
+        listBtn.classList.toggle('text-[#e6edf3]', mode === 'list');
+        listBtn.classList.toggle('text-[#8b949e]', mode !== 'list');
+      }
+      if (gridBtn) {
+        gridBtn.classList.toggle('bg-[#30363d]', mode === 'grid');
+        gridBtn.classList.toggle('text-[#e6edf3]', mode === 'grid');
+        gridBtn.classList.toggle('text-[#8b949e]', mode !== 'grid');
+      }
+    };
+    updateViewButtons(explorer.viewMode);
+
     document.getElementById('btnViewList')?.addEventListener('click', () => {
       explorer.viewMode = 'list';
       localStorage.setItem('polymer_view_mode', 'list');
+      updateViewButtons('list');
       explorer.render();
     });
 
     document.getElementById('btnViewGrid')?.addEventListener('click', () => {
       explorer.viewMode = 'grid';
       localStorage.setItem('polymer_view_mode', 'grid');
+      updateViewButtons('grid');
       explorer.render();
     });
 
@@ -219,6 +237,53 @@ class PolymerOpsApp {
           }
         } catch (err) {
           toast.error(`Login failed: ${err.message}`);
+        }
+      });
+    }
+
+    // Vault Reveal Passwords Toggle
+    document.getElementById('btnRevealAllPasswords')?.addEventListener('click', () => {
+      const isRevealed = vault.toggleRevealAll();
+      const txt = document.getElementById('revealAllText');
+      if (txt) txt.textContent = isRevealed ? 'Hide Passwords' : 'Reveal Passwords';
+      toast.info(isRevealed ? 'Passwords revealed' : 'Passwords hidden');
+    });
+
+    // Vault Critical PIN Unlock Modal
+    document.getElementById('btnUnlockCritical')?.addEventListener('click', () => {
+      if (security.isCriticalUnlocked()) {
+        security.lockCritical();
+        vault.loadVault();
+        const txt = document.getElementById('pinStatusText');
+        if (txt) txt.textContent = 'Unlock PIN';
+        toast.info('Critical vault locked');
+      } else {
+        modals.open('pinModal');
+        document.getElementById('inputPinCode')?.focus();
+      }
+    });
+
+    // PIN Submission Form
+    const pinForm = document.getElementById('formPin');
+    if (pinForm) {
+      pinForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const pinInput = document.getElementById('inputPinCode');
+        const pin = pinInput ? pinInput.value.trim() : '';
+        try {
+          const success = await security.verifyPin(pin);
+          if (success) {
+            toast.success('Critical Vault unlocked (15 min)');
+            modals.close('pinModal');
+            if (pinInput) pinInput.value = '';
+            const txt = document.getElementById('pinStatusText');
+            if (txt) txt.textContent = 'Lock Critical';
+            await vault.loadVault();
+          } else {
+            toast.error('Incorrect PIN code');
+          }
+        } catch (err) {
+          toast.error(`PIN verification error: ${err.message}`);
         }
       });
     }

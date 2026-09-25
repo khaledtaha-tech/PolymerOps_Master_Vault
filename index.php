@@ -173,10 +173,20 @@ declare(strict_types=1);
 
     <!-- VIEW 2: CREDENTIAL VAULT -->
     <section id="viewVault" class="hidden space-y-6">
-      <div class="flex items-center justify-between">
+      <div class="flex items-center justify-between flex-wrap gap-3">
         <div>
           <h2 class="text-lg font-bold text-[#e6edf3]">Credential Vault</h2>
           <p class="text-xs text-[#8b949e]">Sector inheritance & encrypted account passwords</p>
+        </div>
+        <div class="flex items-center gap-2">
+          <button id="btnRevealAllPasswords" class="btn-secondary text-xs py-1.5 px-3">
+            <svg class="w-4 h-4 text-[#8b949e]" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+            <span id="revealAllText">Reveal Passwords</span>
+          </button>
+          <button id="btnUnlockCritical" class="btn-secondary text-xs py-1.5 px-3 text-rose-400 border-rose-900/60 hover:border-rose-700">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+            <span id="pinStatusText">Unlock PIN</span>
+          </button>
         </div>
       </div>
       <div id="vaultContainer"></div>
@@ -269,6 +279,28 @@ declare(strict_types=1);
           <input id="loginPassword" type="password" required autocomplete="current-password" class="vault-input">
         </div>
         <button type="submit" class="btn-primary w-full text-xs py-2 mt-2">Sign In to Vault</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- =========================================================================
+       5. Critical Vault PIN Modal
+       ========================================================================= -->
+  <div id="pinModal" class="modal-overlay hidden">
+    <div class="modal-card max-w-xs">
+      <div class="flex items-center justify-between mb-4">
+        <h3 class="text-base font-bold text-rose-400">Unlock Critical Vault</h3>
+        <button data-modal-close class="text-[#8b949e] hover:text-[#e6edf3]">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+
+      <form id="formPin" class="space-y-4">
+        <div>
+          <label class="text-xs text-[#8b949e] block mb-1">Enter Master PIN</label>
+          <input id="inputPinCode" type="password" inputmode="numeric" required class="vault-input text-center font-mono text-lg tracking-widest" placeholder="••••">
+        </div>
+        <button type="submit" class="btn-primary w-full text-xs py-2 bg-rose-600 hover:bg-rose-700">Unlock Secrets</button>
       </form>
     </div>
   </div>
