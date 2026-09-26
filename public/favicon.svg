@@ -1,0 +1,68 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" fill="none">
+  <defs>
+    <!-- Background Gradient -->
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#1e1b4b"/>
+      <stop offset="50%" stop-color="#0f172a"/>
+      <stop offset="100%" stop-color="#030712"/>
+    </linearGradient>
+
+    <!-- Outer Border / Glow Gradient -->
+    <linearGradient id="borderGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#6366f1"/>
+      <stop offset="50%" stop-color="#38bdf8"/>
+      <stop offset="100%" stop-color="#10b981"/>
+    </linearGradient>
+
+    <!-- Polymer Network Gradient -->
+    <linearGradient id="polyGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#818cf8"/>
+      <stop offset="100%" stop-color="#06b6d4"/>
+    </linearGradient>
+
+    <!-- Padlock / Vault Gradient -->
+    <linearGradient id="vaultGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#6366f1"/>
+      <stop offset="100%" stop-color="#4f46e5"/>
+    </linearGradient>
+
+    <!-- Core Shield Glow Gradient -->
+    <linearGradient id="coreGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#38bdf8"/>
+      <stop offset="100%" stop-color="#10b981"/>
+    </linearGradient>
+    
+    <!-- Drop Shadow for Standout Tab Visibility -->
+    <filter id="tabGlow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="1.5" stdDeviation="2" flood-color="#000000" flood-opacity="0.6"/>
+    </filter>
+  </defs>
+
+  <!-- Base Squircle Container with High-Contrast Border -->
+  <rect x="3" y="3" width="58" height="58" rx="16" fill="url(#bgGrad)" stroke="url(#borderGrad)" stroke-width="2.5" filter="url(#tabGlow)"/>
+
+  <!-- Polymer DevOps Structure (Hexagonal Grid Lines) -->
+  <polygon points="32,11 50,21 50,43 32,53 14,43 14,21" fill="none" stroke="url(#polyGrad)" stroke-width="1.8" stroke-dasharray="2 1" opacity="0.75"/>
+
+  <!-- Interconnecting Polymer Network Nodes -->
+  <circle cx="32" cy="11" r="2.2" fill="#38bdf8"/>
+  <circle cx="50" cy="21" r="2.2" fill="#818cf8"/>
+  <circle cx="50" cy="43" r="2.2" fill="#10b981"/>
+  <circle cx="32" cy="53" r="2.2" fill="#34d399"/>
+  <circle cx="14" cy="43" r="2.2" fill="#10b981"/>
+  <circle cx="14" cy="21" r="2.2" fill="#818cf8"/>
+
+  <!-- Vault Shield / Lock Body Backdrop -->
+  <path d="M32 17 L44 23 V34 C44 42 38 47 32 49 C26 47 20 42 20 34 V23 Z" fill="#0f172a" stroke="url(#coreGrad)" stroke-width="1.8"/>
+
+  <!-- High-Security Padlock Shackle -->
+  <path d="M27 28 V24 C27 21.2386 29.2386 19 32 19 C34.7614 19 37 21.2386 37 24 V28" fill="none" stroke="#f8fafc" stroke-width="2.8" stroke-linecap="round"/>
+
+  <!-- Padlock Core Body -->
+  <rect x="25" y="27" width="14" height="12" rx="2.5" fill="url(#vaultGrad)" stroke="#818cf8" stroke-width="1.2"/>
+
+  <!-- Glowing Cryptographic Keyhole & Access Indicator -->
+  <circle cx="32" cy="32" r="1.8" fill="#38bdf8"/>
+  <polygon points="30.5,36 33.5,36 33,32.5 31,32.5" fill="#38bdf8"/>
+  <circle cx="32" cy="32" r="0.8" fill="#ffffff"/>
+</svg>
