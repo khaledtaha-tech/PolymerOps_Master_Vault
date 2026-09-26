@@ -149,7 +149,7 @@ export class ExplorerModule {
       });
     }
 
-    // Visibility filter buttons: [All], [Public], [Private], [Sources Only], [Forks]
+    // Visibility filter buttons: [All], [Public], [Private], [Sources Only], [Forks], [Secured Vault]
     if (this.visibilityFilter === 'public') {
       list = list.filter(r => !r.private && !r.fork);
     } else if (this.visibilityFilter === 'private') {
@@ -158,6 +158,8 @@ export class ExplorerModule {
       list = list.filter(r => !r.fork);
     } else if (this.visibilityFilter === 'forks') {
       list = list.filter(r => r.fork);
+    } else if (this.visibilityFilter === 'secured') {
+      list = list.filter(r => synergy.isRepoLinked(r.id));
     }
 
     // Language filter dropdown
@@ -186,6 +188,14 @@ export class ExplorerModule {
       btn.classList.toggle('text-[#e6edf3]', active);
       btn.classList.toggle('text-[#8b949e]', !active);
     });
+
+    const cardSecured = document.getElementById('cardSecuredRepos');
+    if (cardSecured) {
+      const isSecuredActive = (this.visibilityFilter === 'secured');
+      cardSecured.classList.toggle('ring-1', isSecuredActive);
+      cardSecured.classList.toggle('ring-indigo-400', isSecuredActive);
+      cardSecured.classList.toggle('border-indigo-500', isSecuredActive);
+    }
   }
 
   async saveMetadata(repoId, patch, repoName = '') {
@@ -342,11 +352,18 @@ export class ExplorerModule {
     const pubEl = document.getElementById('statPublicRepos');
     const privEl = document.getElementById('statPrivateRepos');
     const forksEl = document.getElementById('statForks');
+    const securedEl = document.getElementById('statSecuredRepos');
+    const securedRatioEl = document.getElementById('statSecuredRatio');
 
-    if (totalEl && this.stats) totalEl.textContent = this.stats.total || 0;
+    const totalCount = this.stats?.total || this.repositories.length || 0;
+    const securedCount = synergy.getSecuredReposCount(this.repositories);
+
+    if (totalEl && this.stats) totalEl.textContent = totalCount;
     if (pubEl && this.stats) pubEl.textContent = this.stats.public || 0;
     if (privEl && this.stats) privEl.textContent = this.stats.private || 0;
     if (forksEl && this.stats) forksEl.textContent = this.stats.forks || 0;
+    if (securedEl) securedEl.textContent = securedCount;
+    if (securedRatioEl) securedRatioEl.textContent = `/ ${totalCount}`;
   }
 
   renderLoading(loading) {
@@ -497,13 +514,19 @@ export class ExplorerModule {
                 <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
               </button>
 
-              <!-- Smart Link Synergy Badge -->
+              <!-- Smart Link Synergy Badge / Vault Binding -->
               ${hasVaultLink ? `
-                <button data-action="open-vault-for-repo" data-repo-id="${r.id}" data-name="${r.name}" class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] bg-indigo-950 text-indigo-300 border border-indigo-700 hover:bg-indigo-900 cursor-pointer" title="Linked to ${linkedVaults.length} Vault account(s) - Click to view in Vault">
-                  <svg class="w-3 h-3 text-indigo-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 15v2m-6 4h12a2 2 0 0 0 2-2v-6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2zm10-10V7a4 4 0 0 0-8 0v4h8z"/></svg>
-                  <span>${linkedVaults.length} Vault</span>
+                <button data-action="open-credentials-drawer" data-repo-id="${r.id}" data-name="${r.name}" class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] bg-emerald-950/80 text-emerald-300 border border-emerald-700/70 hover:bg-emerald-900 cursor-pointer transition shadow-sm" title="${linkedVaults.length} Credentials Attached - Click to open decrypted drawer">
+                  <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                  <svg class="w-3 h-3 text-emerald-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 15v2m-6 4h12a2 2 0 0 0 2-2v-6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2zm10-10V7a4 4 0 0 0-8 0v4h8z"/></svg>
+                  <span>${linkedVaults.length === 1 ? 'Credentials Attached' : linkedVaults.length + ' Credentials Attached'}</span>
                 </button>
-              ` : ''}
+              ` : `
+                <button data-action="attach-vault-modal" data-repo-id="${r.id}" data-name="${r.name}" data-url="${r.homepage || r.html_url}" data-desc="${r.description || ''}" class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] bg-[#21262d] text-[#8b949e] hover:text-[#58a6ff] hover:bg-[#30363d] border border-[#30363d] cursor-pointer transition" title="No vault credentials linked. Click to attach new account">
+                  <svg class="w-3 h-3" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                  <span>+ Attach Vault</span>
+                </button>
+              `}
             </div>
             ${r.description ? `<p class="text-[11px] text-[#8b949e] mt-0.5 max-w-xs truncate" title="${r.description}">${r.description}</p>` : ''}
           </td>
@@ -608,7 +631,17 @@ export class ExplorerModule {
               </div>
               ${selectedDb !== 'None' ? `<span class="px-1.5 py-0.5 rounded text-[10px] bg-emerald-950 text-emerald-300 border border-emerald-800">${selectedDb}</span>` : ''}
               ${selectedAuth !== 'None' ? `<span class="px-1.5 py-0.5 rounded text-[10px] bg-purple-950 text-purple-300 border border-purple-800">${selectedAuth}</span>` : ''}
-              ${linkedVaults.length > 0 ? `<button data-action="open-vault-for-repo" data-repo-id="${r.id}" data-name="${r.name}" class="px-1.5 py-0.5 rounded text-[10px] bg-indigo-950 text-indigo-300 border border-indigo-800 cursor-pointer">🔑 ${linkedVaults.length} Vault</button>` : ''}
+              ${linkedVaults.length > 0 ? `
+                <button data-action="open-credentials-drawer" data-repo-id="${r.id}" data-name="${r.name}" class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] bg-emerald-950/80 text-emerald-300 border border-emerald-700/70 hover:bg-emerald-900 cursor-pointer" title="${linkedVaults.length} Credentials Attached">
+                  <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                  <span>🔑 ${linkedVaults.length === 1 ? 'Credentials Attached' : linkedVaults.length + ' Credentials'}</span>
+                </button>
+              ` : `
+                <button data-action="attach-vault-modal" data-repo-id="${r.id}" data-name="${r.name}" data-url="${r.homepage || r.html_url}" data-desc="${r.description || ''}" class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] bg-[#21262d] text-[#8b949e] hover:text-[#58a6ff] hover:bg-[#30363d] border border-[#30363d] cursor-pointer">
+                  <svg class="w-3 h-3" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                  <span>+ Attach Vault</span>
+                </button>
+              `}
             </div>
           </div>
 
@@ -678,6 +711,20 @@ export class ExplorerModule {
     container.querySelectorAll('[data-action="open-vault-for-repo"]').forEach(btn => {
       btn.addEventListener('click', () => {
         synergy.openVaultForRepo(btn.dataset.repoId, btn.dataset.name);
+      });
+    });
+
+    // Open Decrypted Credentials Drawer
+    container.querySelectorAll('[data-action="open-credentials-drawer"]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        synergy.openCredentialsDrawer(btn.dataset.repoId, btn.dataset.name);
+      });
+    });
+
+    // Attach Vault Account Modal (Pre-filled)
+    container.querySelectorAll('[data-action="attach-vault-modal"]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        synergy.attachVaultModal(btn.dataset.repoId, btn.dataset.name, btn.dataset.url, btn.dataset.desc);
       });
     });
   }

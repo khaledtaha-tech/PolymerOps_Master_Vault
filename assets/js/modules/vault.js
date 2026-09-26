@@ -84,6 +84,12 @@ export class VaultModule {
         this.links = data.vault.links || [];
         security.setUnlocked(data.vault.criticalUnlocked);
 
+        // Auto-Discovery: Correlate repositories and vault accounts
+        if (explorer.repositories && explorer.repositories.length > 0 && this.accounts.length > 0) {
+          await synergy.correlate(explorer.repositories, this.accounts);
+          this.links = synergy.links;
+        }
+
         this.applyFilters();
         this.renderSidebar();
         this.render();
@@ -434,12 +440,28 @@ export class VaultModule {
             <div class="mt-3 flex items-center gap-1.5 flex-wrap">
               <span class="px-1.5 py-0.5 rounded text-[10px] bg-[#21262d] text-[#8b949e] border border-[#30363d]">${acc.authType}</span>
               ${acc.sharedWithTeam ? '<span class="px-1.5 py-0.5 rounded text-[10px] bg-indigo-950 text-indigo-300 border border-indigo-800">Team Shared</span>' : ''}
-              ${linkedRepos.map(l => `
-                <button data-action="open-repo" data-repo-id="${l.repository_id}" class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] bg-slate-800 text-slate-300 hover:bg-slate-700 border border-slate-700 transition" title="Linked to GitHub repo">
-                  <svg class="w-3 h-3 text-[#58a6ff]" fill="currentColor" viewBox="0 0 24 24"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
-                  <span>${l.repo_name || 'Repo #' + l.repository_id}</span>
+              ${linkedRepos.map(l => {
+                const repoObj = explorer.repositories.find(r => r.id === parseInt(l.repository_id));
+                const repoUrl = repoObj?.html_url || l.repo_url || ('https://github.com/' + (l.repo_name || ''));
+                const repoName = repoObj?.name || l.repo_name || ('Repo #' + l.repository_id);
+                return `
+                  <div class="inline-flex items-center rounded text-[10px] bg-slate-800/90 text-slate-300 border border-slate-700 overflow-hidden shadow-xs">
+                    <button data-action="open-repo" data-repo-id="${l.repository_id}" data-repo-name="${repoName}" class="inline-flex items-center gap-1 px-1.5 py-0.5 hover:bg-slate-700 hover:text-white transition cursor-pointer" title="Focus repository in Explorer">
+                      <svg class="w-3 h-3 text-[#58a6ff]" fill="currentColor" viewBox="0 0 24 24"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
+                      <span class="max-w-[110px] truncate">${repoName}</span>
+                    </button>
+                    <a href="${repoUrl}" target="_blank" rel="noopener" class="px-1 py-0.5 border-l border-slate-700 text-[#8b949e] hover:text-[#58a6ff] hover:bg-slate-700 transition" title="Open on GitHub in new tab">
+                      <svg class="w-3 h-3" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+                    </a>
+                  </div>
+                `;
+              }).join('')}
+              ${linkedRepos.length === 0 ? `
+                <button data-action="link-repo-modal" data-account-id="${acc.id}" class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] bg-[#21262d] text-[#8b949e] hover:text-[#58a6ff] hover:bg-[#30363d] border border-[#30363d] transition cursor-pointer" title="Link to GitHub repository">
+                  <svg class="w-3 h-3" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                  <span>+ Repo</span>
                 </button>
-              `).join('')}
+              ` : ''}
             </div>
           </div>
 
@@ -545,11 +567,21 @@ export class VaultModule {
           <!-- Col 7: Linked Repo -->
           <td class="py-2.5 px-3">
             ${linkedRepos.length > 0 ? `
-              <button data-action="open-repo" data-repo-id="${linkedRepos[0].repository_id}" class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] bg-slate-800 text-slate-300 hover:bg-slate-700 border border-slate-700 transition" title="Go to GitHub repository">
-                <svg class="w-3 h-3 text-[#58a6ff]" fill="currentColor" viewBox="0 0 24 24"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
-                <span>${linkedRepos[0].repo_name || 'Repo #' + linkedRepos[0].repository_id}</span>
+              <div class="inline-flex items-center rounded text-[10px] bg-slate-800/90 text-slate-300 border border-slate-700 overflow-hidden shadow-xs">
+                <button data-action="open-repo" data-repo-id="${linkedRepos[0].repository_id}" data-repo-name="${linkedRepos[0].repo_name || ''}" class="inline-flex items-center gap-1 px-1.5 py-0.5 hover:bg-slate-700 hover:text-white transition cursor-pointer" title="Focus repository in Explorer">
+                  <svg class="w-3 h-3 text-[#58a6ff]" fill="currentColor" viewBox="0 0 24 24"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
+                  <span class="max-w-[100px] truncate">${linkedRepos[0].repo_name || 'Repo #' + linkedRepos[0].repository_id}</span>
+                </button>
+                <a href="${linkedRepos[0].repo_url || ('https://github.com/' + (linkedRepos[0].repo_name || ''))}" target="_blank" rel="noopener" class="px-1 py-0.5 border-l border-slate-700 text-[#8b949e] hover:text-[#58a6ff] hover:bg-slate-700 transition" title="Open on GitHub in new tab">
+                  <svg class="w-3 h-3" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+                </a>
+              </div>
+            ` : `
+              <button data-action="link-repo-modal" data-account-id="${acc.id}" class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] bg-[#21262d] text-[#8b949e] hover:text-[#58a6ff] hover:bg-[#30363d] border border-[#30363d] transition cursor-pointer" title="Link to GitHub repository">
+                <svg class="w-3 h-3" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                <span>+ Link Repo</span>
               </button>
-            ` : '<span class="text-[#8b949e]">—</span>'}
+            `}
           </td>
 
           <!-- Col 8: Actions -->
@@ -697,7 +729,15 @@ export class VaultModule {
     // Open Linked GitHub Repo in Explorer
     container.querySelectorAll('[data-action="open-repo"]').forEach(btn => {
       btn.addEventListener('click', () => {
-        synergy.openRepoForAccount(btn.dataset.repoId);
+        synergy.openRepoForAccount(btn.dataset.repoId, btn.dataset.repoName);
+      });
+    });
+
+    // Link Account to Repo Modal
+    container.querySelectorAll('[data-action="link-repo-modal"]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const acc = this.accounts.find(a => a.id === btn.dataset.accountId);
+        if (acc) this.openAccountModal(acc);
       });
     });
 
@@ -708,7 +748,7 @@ export class VaultModule {
   // =========================================================================
   // Modal: Full Account Modal (Add / Edit)
   // =========================================================================
-  openAccountModal(account = null) {
+  openAccountModal(account = null, defaults = null) {
     this.editingAccountId = account ? account.id : null;
     const modalTitle = document.getElementById('accountModalTitle');
     if (modalTitle) modalTitle.textContent = account ? 'Edit Vault Account' : 'Create New Account';
@@ -718,7 +758,7 @@ export class VaultModule {
     if (sectorSelect) {
       let optionsHtml = '<option value="">(None - Independent)</option>';
       this.sectors.forEach(s => {
-        const sel = (account && account.sectorId === s.id) ? 'selected' : '';
+        const sel = (account && account.sectorId === s.id) || (defaults && defaults.sectorId === s.id) ? 'selected' : '';
         optionsHtml += `<option value="${s.id}" ${sel}>${s.name}</option>`;
       });
       sectorSelect.innerHTML = optionsHtml;
@@ -729,7 +769,7 @@ export class VaultModule {
     if (repoSelect) {
       let repoOptions = '<option value="">(None)</option>';
       const currentLink = account ? this.links.find(l => String(l.account_id) === String(account.id)) : null;
-      const currentRepoId = currentLink ? parseInt(currentLink.repository_id) : 0;
+      const currentRepoId = currentLink ? parseInt(currentLink.repository_id) : (defaults?.linkedRepoId ? parseInt(defaults.linkedRepoId) : 0);
 
       explorer.repositories.forEach(r => {
         const sel = (currentRepoId === r.id) ? 'selected' : '';
@@ -739,21 +779,21 @@ export class VaultModule {
     }
 
     // Set fields
-    document.getElementById('accTitle').value = account?.title || '';
-    document.getElementById('accUrl').value = account?.url || '';
-    document.getElementById('accUsername').value = account?.customUsername || '';
-    document.getElementById('accPassword').value = account?.customPassword || '';
-    document.getElementById('accAuthType').value = account?.authType || 'CREDENTIALS';
-    document.getElementById('accLogicRule').value = account?.logicRule || 'CUSTOM';
-    document.getElementById('accCategory').value = account?.category || 'GENERAL';
+    document.getElementById('accTitle').value = account?.title || defaults?.title || '';
+    document.getElementById('accUrl').value = account?.url || defaults?.url || '';
+    document.getElementById('accUsername').value = account?.customUsername || defaults?.username || '';
+    document.getElementById('accPassword').value = account?.customPassword || defaults?.password || '';
+    document.getElementById('accAuthType').value = account?.authType || defaults?.authType || 'CREDENTIALS';
+    document.getElementById('accLogicRule').value = account?.logicRule || defaults?.logicRule || 'CUSTOM';
+    document.getElementById('accCategory').value = account?.category || defaults?.category || 'WORK';
     document.getElementById('accMobile').value = account?.mobileNumber || '';
-    document.getElementById('accShared').checked = !!account?.sharedWithTeam;
-    document.getElementById('accDbInfo').value = account?.dbInfo || '';
-    document.getElementById('accApiKey').value = account?.apiKey || '';
-    document.getElementById('accNotes').value = account?.notes || '';
+    document.getElementById('accShared').checked = !!(account?.sharedWithTeam || defaults?.sharedWithTeam);
+    document.getElementById('accDbInfo').value = account?.dbInfo || defaults?.dbInfo || '';
+    document.getElementById('accApiKey').value = account?.apiKey || defaults?.apiKey || '';
+    document.getElementById('accNotes').value = account?.notes || defaults?.notes || '';
 
     // Critical Toggle
-    const isCritical = (account?.category === 'CRITICAL_DRIVE');
+    const isCritical = (account?.category === 'CRITICAL_DRIVE' || defaults?.category === 'CRITICAL_DRIVE');
     const critToggle = document.getElementById('accCriticalToggle');
     if (critToggle) critToggle.checked = isCritical;
 
@@ -762,11 +802,17 @@ export class VaultModule {
 
   async saveAccount(formData) {
     try {
+      if (formData.linkedRepoId > 0 && !formData.linkedRepoName) {
+        const repo = explorer.repositories.find(r => r.id === parseInt(formData.linkedRepoId));
+        if (repo) formData.linkedRepoName = repo.name;
+      }
       const res = await api.post('api.php?resource=vault&action=account', formData);
       if (res.ok) {
         toast.success(this.editingAccountId ? 'Account updated successfully' : 'New account created successfully');
         modals.close('accountModal');
         await this.loadVault();
+        await synergy.loadLinks();
+        explorer.render();
       }
     } catch (err) {
       toast.error(`Save failed: ${err.message}`);

@@ -112,7 +112,8 @@ declare(strict_types=1);
     <section id="viewExplorer" class="space-y-4">
       
       <!-- Top Metrics -->
-      <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+      <!-- Top Metrics -->
+      <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
         <div class="bg-[#161b22] border border-[#30363d] rounded-xl p-3 shadow-sm">
           <div class="text-[11px] text-[#8b949e]">Total Repositories</div>
           <div id="statTotalRepos" class="text-xl font-bold text-[#e6edf3] mt-1">0</div>
@@ -128,6 +129,16 @@ declare(strict_types=1);
         <div class="bg-[#161b22] border border-[#30363d] rounded-xl p-3 shadow-sm">
           <div class="text-[11px] text-[#8b949e]">Forks</div>
           <div id="statForks" class="text-xl font-bold text-[#d29922] mt-1">0</div>
+        </div>
+        <div id="cardSecuredRepos" class="bg-[#161b22] border border-indigo-900/60 rounded-xl p-3 shadow-sm cursor-pointer hover:border-indigo-500/80 transition" title="Click to filter secured repositories with attached credentials">
+          <div class="flex items-center justify-between">
+            <span class="text-[11px] text-indigo-300 font-medium">Secured Repos</span>
+            <svg class="w-3.5 h-3.5 text-indigo-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 15v2m-6 4h12a2 2 0 0 0 2-2v-6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2zm10-10V7a4 4 0 0 0-8 0v4h8z"/></svg>
+          </div>
+          <div class="flex items-baseline gap-1 mt-1">
+            <span id="statSecuredRepos" class="text-xl font-bold text-indigo-300">0</span>
+            <span id="statSecuredRatio" class="text-xs text-[#8b949e]">/ 0</span>
+          </div>
         </div>
       </div>
 
@@ -188,12 +199,16 @@ declare(strict_types=1);
           </div>
 
           <!-- Quick Filter Buttons -->
-          <div class="flex items-center bg-[#0d1117] border border-[#30363d] rounded-lg p-0.5 text-xs">
+          <div class="flex items-center bg-[#0d1117] border border-[#30363d] rounded-lg p-0.5 text-xs flex-wrap">
             <button data-quick-filter="all" class="px-2.5 py-1 rounded bg-[#30363d] text-[#e6edf3] font-medium transition">All</button>
             <button data-quick-filter="public" class="px-2.5 py-1 rounded text-[#8b949e] hover:text-[#e6edf3] transition">Public</button>
             <button data-quick-filter="private" class="px-2.5 py-1 rounded text-[#8b949e] hover:text-[#e6edf3] transition">Private</button>
             <button data-quick-filter="sources" class="px-2.5 py-1 rounded text-[#8b949e] hover:text-[#e6edf3] transition">Sources Only</button>
             <button data-quick-filter="forks" class="px-2.5 py-1 rounded text-[#8b949e] hover:text-[#e6edf3] transition">Forks</button>
+            <button data-quick-filter="secured" class="px-2.5 py-1 rounded text-[#8b949e] hover:text-indigo-300 transition flex items-center gap-1">
+              <span class="w-1.5 h-1.5 rounded-full bg-indigo-400"></span>
+              <span>Secured Vault</span>
+            </button>
           </div>
 
           <!-- Language Selector -->
@@ -407,6 +422,47 @@ declare(strict_types=1);
           <textarea id="notesNextStepsText" rows="6" placeholder="Next tasks, blockers, or credentials to configure..." class="vault-input text-xs"></textarea>
         </div>
       </div>
+    </div>
+  </div>
+
+  <!-- =========================================================================
+       3b. Credentials Side-Drawer (Decrypted Vault Synergy Drawer)
+       ========================================================================= -->
+  <div id="credentialsDrawer" class="fixed inset-0 z-50 pointer-events-none transition-visibility duration-300 invisible">
+    <div id="credentialsDrawerBackdrop" class="fixed inset-0 bg-black/60 backdrop-blur-sm opacity-0 transition-opacity duration-300 pointer-events-none"></div>
+    <div id="credentialsDrawerPanel" class="fixed inset-y-0 right-0 max-w-lg w-full bg-[#161b22] border-l border-[#30363d] shadow-2xl flex flex-col transform translate-x-full transition-transform duration-300 ease-in-out pointer-events-auto">
+      
+      <!-- Drawer Header -->
+      <div class="px-5 py-4 border-b border-[#30363d] flex items-center justify-between bg-[#1c2128]">
+        <div class="flex items-center gap-2.5 min-w-0">
+          <div class="w-8 h-8 rounded-lg bg-emerald-950/80 border border-emerald-700/60 flex items-center justify-center text-emerald-400 flex-shrink-0">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 15v2m-6 4h12a2 2 0 0 0 2-2v-6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2zm10-10V7a4 4 0 0 0-8 0v4h8z"/></svg>
+          </div>
+          <div class="min-w-0">
+            <h3 id="credentialsDrawerTitle" class="font-bold text-sm text-[#e6edf3] truncate">Repository Credentials</h3>
+            <p id="credentialsDrawerSubtitle" class="text-[11px] text-[#8b949e] truncate">Decrypted system logins, DB info, and API tokens</p>
+          </div>
+        </div>
+        <button id="btnCloseCredentialsDrawer" class="p-1.5 rounded-lg text-[#8b949e] hover:text-[#e6edf3] hover:bg-[#30363d] transition flex-shrink-0">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+
+      <!-- Drawer Content Body -->
+      <div id="credentialsDrawerBody" class="flex-1 overflow-y-auto p-5 space-y-4"></div>
+
+      <!-- Drawer Footer Actions -->
+      <div class="p-4 border-t border-[#30363d] bg-[#161b22] flex items-center justify-between gap-3">
+        <button id="btnDrawerAttachAccount" class="btn-primary text-xs py-2 px-3 flex items-center gap-1.5">
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          <span>+ Attach Account</span>
+        </button>
+        <button id="btnDrawerOpenInVault" class="btn-secondary text-xs py-2 px-3 flex items-center gap-1.5">
+          <svg class="w-3.5 h-3.5 text-indigo-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+          <span>Open in Vault</span>
+        </button>
+      </div>
+
     </div>
   </div>
 

@@ -582,6 +582,14 @@ try {
 
                 // Manage repository link if requested
                 if ($linkedRepoId > 0) {
+                    $rName = trim((string) ($data['linkedRepoName'] ?? ''));
+                    if ($rName === '') $rName = 'repo-' . $linkedRepoId;
+                    $rUrl = 'https://github.com/' . $rName;
+                    $insRepo = $pdo->prepare('INSERT INTO repositories (id, user_id, name, full_name, owner_login, html_url, clone_url, ssh_url, last_synced_at) 
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP) 
+                        ON DUPLICATE KEY UPDATE name = VALUES(name)');
+                    $insRepo->execute([$linkedRepoId, $userId, $rName, $rName, 'owner', $rUrl, $rUrl . '.git', 'git@github.com:' . $rName . '.git']);
+
                     $linkId = uuid_v4();
                     $linkStmt = $pdo->prepare('INSERT INTO repo_vault_links (id, user_id, repository_id, account_id, link_nature) 
                         VALUES (?, ?, ?, ?, "PRIMARY_HOSTING") 
@@ -825,7 +833,54 @@ try {
         $pdo = db();
 
         if ($method === 'GET') {
-            $stmt = $pdo->prepare('SELECT l.id, l.repository_id, l.account_id, l.link_nature, a.title AS account_title, a.url AS account_url FROM repo_vault_links l INNER JOIN accounts a ON a.id = l.account_id WHERE l.user_id = ?');
+            if ($action === 'details') {
+                $repoId = (int) ($_GET['repo_id'] ?? 0);
+                if ($repoId <= 0) {
+                    json_response(['ok' => false, 'error' => 'Valid repo_id required.'], 400);
+                }
+
+                $stmt = $pdo->prepare('SELECT l.id AS link_id, l.link_nature, l.repository_id, a.*, s.name AS sector_name, s.default_username AS sector_default_user, s.default_password AS sector_default_pass 
+                    FROM repo_vault_links l 
+                    INNER JOIN accounts a ON a.id = l.account_id 
+                    LEFT JOIN sectors s ON s.id = a.sector_id 
+                    WHERE l.user_id = ? AND l.repository_id = ? 
+                    ORDER BY a.title ASC');
+                $stmt->execute([$userId, $repoId]);
+                $rows = $stmt->fetchAll();
+
+                $accounts = array_map(function($r) {
+                    $sectorPass = vault_decrypt($r['sector_default_pass'] ?? null) ?? '';
+                    $customPass = vault_decrypt($r['custom_password'] ?? null) ?? '';
+                    $pass = $customPass !== '' ? $customPass : $sectorPass;
+                    $user = $r['custom_username'] ?: ($r['sector_default_user'] ?? '');
+
+                    return [
+                        'linkId' => $r['link_id'],
+                        'linkNature' => $r['link_nature'],
+                        'repositoryId' => (int) $r['repository_id'],
+                        'id' => $r['id'],
+                        'title' => $r['title'],
+                        'url' => $r['url'] ?? '',
+                        'authType' => $r['auth_type'],
+                        'logicRule' => $r['logic_rule'],
+                        'username' => $user,
+                        'password' => $pass,
+                        'category' => $r['category'],
+                        'sectorName' => $r['sector_name'] ?? 'Independent',
+                        'dbInfo' => vault_decrypt($r['db_info'] ?? null) ?? '',
+                        'apiKey' => vault_decrypt($r['api_key'] ?? null) ?? '',
+                        'notes' => $r['notes'] ?? '',
+                    ];
+                }, $rows);
+
+                json_response(['ok' => true, 'accounts' => $accounts]);
+            }
+
+            $stmt = $pdo->prepare('SELECT l.id, l.repository_id, l.account_id, l.link_nature, a.title AS account_title, a.url AS account_url, r.name AS repo_name, r.html_url AS repo_url 
+                FROM repo_vault_links l 
+                INNER JOIN accounts a ON a.id = l.account_id 
+                LEFT JOIN repositories r ON r.id = l.repository_id 
+                WHERE l.user_id = ?');
             $stmt->execute([$userId]);
             json_response(['ok' => true, 'links' => $stmt->fetchAll()]);
         }
@@ -833,13 +888,57 @@ try {
         if ($method === 'POST') {
             require_csrf();
             $data = read_json_body();
+
+            // Handle Batch Linking (Auto-Discovery & Domain Correlation)
+            if ($action === 'batch') {
+                $batchLinks = $data['links'] ?? [];
+                if (!is_array($batchLinks) || empty($batchLinks)) {
+                    json_response(['ok' => false, 'error' => 'No links provided in batch.'], 422);
+                }
+
+                $insRepo = $pdo->prepare('INSERT INTO repositories (id, user_id, name, full_name, owner_login, html_url, clone_url, ssh_url, last_synced_at) 
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP) 
+                    ON DUPLICATE KEY UPDATE name = VALUES(name)');
+                $insLink = $pdo->prepare('INSERT INTO repo_vault_links (id, user_id, repository_id, account_id, link_nature) 
+                    VALUES (?, ?, ?, ?, ?) 
+                    ON DUPLICATE KEY UPDATE link_nature = VALUES(link_nature)');
+
+                $linkedCount = 0;
+                foreach ($batchLinks as $item) {
+                    $rId = (int) ($item['repositoryId'] ?? 0);
+                    $aId = trim((string) ($item['accountId'] ?? ''));
+                    $nature = (string) ($item['linkNature'] ?? 'PRIMARY_HOSTING');
+                    $rName = trim((string) ($item['repoName'] ?? ''));
+                    if ($rName === '') $rName = 'repo-' . $rId;
+                    $rUrl = trim((string) ($item['repoUrl'] ?? ('https://github.com/' . $rName)));
+
+                    if ($rId > 0 && $aId !== '') {
+                        $insRepo->execute([$rId, $userId, $rName, $rName, 'owner', $rUrl, $rUrl . '.git', 'git@github.com:' . $rName . '.git']);
+                        $linkId = uuid_v4();
+                        $insLink->execute([$linkId, $userId, $rId, $aId, $nature]);
+                        $linkedCount++;
+                    }
+                }
+
+                json_response(['ok' => true, 'count' => $linkedCount]);
+            }
+
+            // Single Link
             $repoId = (int) ($data['repositoryId'] ?? 0);
             $accountId = trim((string) ($data['accountId'] ?? ''));
             $nature = (string) ($data['linkNature'] ?? 'PRIMARY_HOSTING');
+            $repoName = trim((string) ($data['repoName'] ?? ''));
+            if ($repoName === '') $repoName = 'repo-' . $repoId;
+            $repoUrl = trim((string) ($data['repoUrl'] ?? ('https://github.com/' . $repoName)));
 
             if ($repoId <= 0 || $accountId === '') {
                 json_response(['ok' => false, 'error' => 'Repository ID and Account ID are required.'], 422);
             }
+
+            $insRepo = $pdo->prepare('INSERT INTO repositories (id, user_id, name, full_name, owner_login, html_url, clone_url, ssh_url, last_synced_at) 
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP) 
+                ON DUPLICATE KEY UPDATE name = VALUES(name)');
+            $insRepo->execute([$repoId, $userId, $repoName, $repoName, 'owner', $repoUrl, $repoUrl . '.git', 'git@github.com:' . $repoName . '.git']);
 
             $id = uuid_v4();
             $ins = $pdo->prepare('INSERT INTO repo_vault_links (id, user_id, repository_id, account_id, link_nature) VALUES (?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE link_nature = VALUES(link_nature)');

@@ -183,6 +183,13 @@ class PolymerOpsApp {
       });
     });
 
+    // Metric Card: Secured Repos Filter Toggle
+    document.getElementById('cardSecuredRepos')?.addEventListener('click', () => {
+      explorer.visibilityFilter = (explorer.visibilityFilter === 'secured') ? 'all' : 'secured';
+      explorer.applyFilters();
+      explorer.render();
+    });
+
     // Language Filter Dropdown
     document.getElementById('selectFilterLanguage')?.addEventListener('change', (e) => {
       explorer.languageFilter = e.target.value;
@@ -390,6 +397,7 @@ class PolymerOpsApp {
           apiKey: document.getElementById('accApiKey').value.trim() || null,
           notes: document.getElementById('accNotes').value.trim() || null,
           linkedRepoId: parseInt(document.getElementById('accLinkedRepo').value) || 0,
+          linkedRepoName: (document.getElementById('accLinkedRepo').options[document.getElementById('accLinkedRepo').selectedIndex]?.text || '').replace(/^\(None\)$/, '').trim(),
         };
 
         await vault.saveAccount(payload);
