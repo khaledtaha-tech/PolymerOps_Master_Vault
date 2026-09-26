@@ -3,18 +3,16 @@
  * 
  * Bridges code repositories directly to encrypted vault credentials:
  * - Domain matching (repo.homepage <-> account.url)
- * - Credential injection into repository cards & inspection modal
- * - Database connection string extraction
+ * - Bidirectional navigation between repositories and vault credentials
+ * - Relational binding (repo_vault_links) lifecycle
  */
 
 import { api } from '../core/api-client.js';
 import { toast } from '../ui/toast.js';
-import { modals } from '../ui/modals.js';
 
 export class SynergyModule {
   constructor() {
     this.links = [];
-    this.activeRepoId = 0;
   }
 
   async loadLinks() {
@@ -30,14 +28,34 @@ export class SynergyModule {
   }
 
   getLinksForRepo(repoId) {
-    return this.links.filter(l => parseInt(l.repository_id) === parseInt(repoId));
+    const id = parseInt(repoId);
+    return this.links.filter(l => parseInt(l.repository_id) === id);
+  }
+
+  getLinksForAccount(accountId) {
+    const id = String(accountId);
+    return this.links.filter(l => String(l.account_id) === id);
+  }
+
+  openVaultForRepo(repoId, repoName = '') {
+    window.dispatchEvent(new CustomEvent('polymer:switch-view', {
+      detail: { view: 'vault', repoId: parseInt(repoId), repoName }
+    }));
+    toast.info(`Switched to Vault filtered for: ${repoName || 'Repo #' + repoId}`);
+  }
+
+  openRepoForAccount(repoId, repoName = '') {
+    window.dispatchEvent(new CustomEvent('polymer:switch-view', {
+      detail: { view: 'explorer', repoId: parseInt(repoId), repoName }
+    }));
+    toast.info(`Switched to Explorer for: ${repoName || 'Repo #' + repoId}`);
   }
 
   async createLink(repositoryId, accountId, linkNature = 'PRIMARY_HOSTING') {
     try {
       const res = await api.post('api.php?resource=links', {
-        repositoryId,
-        accountId,
+        repositoryId: parseInt(repositoryId),
+        accountId: String(accountId),
         linkNature,
       });
 
@@ -58,14 +76,15 @@ export class SynergyModule {
       if (res.ok) {
         toast.info('Vault link removed');
         await this.loadLinks();
+        return true;
       }
     } catch (err) {
       toast.error(`Could not delete link: ${err.message}`);
     }
+    return false;
   }
 
   renderBadgeIndicators() {
-    // Dynamically enrich repository rows that have active vault links
     document.querySelectorAll('[data-repo-id]').forEach(el => {
       const repoId = parseInt(el.dataset.repoId);
       const matched = this.getLinksForRepo(repoId);
@@ -73,10 +92,10 @@ export class SynergyModule {
       if (badgeContainer) {
         if (matched.length > 0) {
           badgeContainer.innerHTML = `
-            <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] bg-indigo-950 text-indigo-400 border border-indigo-800" title="${matched.length} Linked Vault Credentials">
-              <svg class="w-3 h-3" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+            <button data-action="synergy-open-vault" data-repo-id="${repoId}" class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] bg-indigo-950/80 hover:bg-indigo-900 text-indigo-300 border border-indigo-700/60 transition cursor-pointer" title="${matched.length} Linked Vault Credentials - Click to open in Vault">
+              <svg class="w-3 h-3 text-indigo-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 15v2m-6 4h12a2 2 0 0 0 2-2v-6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2zm10-10V7a4 4 0 0 0-8 0v4h8z"/></svg>
               <span>${matched.length} Vault</span>
-            </span>
+            </button>
           `;
         } else {
           badgeContainer.innerHTML = '';

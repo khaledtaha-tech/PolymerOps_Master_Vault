@@ -311,6 +311,56 @@ try {
             ], 401);
         }
 
+        // Action: Update Repository Metadata (Database, Auth, AI Dev Tool, Prompt Tool)
+        if ($action === 'metadata') {
+            require_method('POST', 'PATCH');
+            $userId = current_user_id();
+            $data = read_json_body();
+            $repoId = (int) ($data['repositoryId'] ?? 0);
+            $detectedDb = isset($data['detectedDb']) ? trim((string) $data['detectedDb']) : null;
+            $detectedAuth = isset($data['detectedAuth']) ? trim((string) $data['detectedAuth']) : null;
+            $assignedAiTool = isset($data['assignedAiTool']) ? trim((string) $data['assignedAiTool']) : null;
+            $assignedPromptTool = isset($data['assignedPromptTool']) ? trim((string) $data['assignedPromptTool']) : null;
+            $repoName = trim((string) ($data['name'] ?? ''));
+
+            if ($repoId <= 0) {
+                json_response(['ok' => false, 'error' => 'Valid repository ID required.', 'code' => 'PARAM_MISSING'], 422);
+            }
+
+            if ($userId !== null && db_available()) {
+                require_csrf();
+                $pdo = db();
+                $rName = $repoName !== '' ? $repoName : 'repo-' . $repoId;
+                $insRepo = $pdo->prepare('INSERT INTO repositories (id, user_id, name, full_name, owner_login, html_url, clone_url, ssh_url, last_synced_at) 
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP) 
+                    ON DUPLICATE KEY UPDATE name = VALUES(name)');
+                $insRepo->execute([
+                    $repoId, 
+                    $userId, 
+                    $rName, 
+                    $rName, 
+                    'owner', 
+                    'https://github.com/' . $rName, 
+                    'https://github.com/' . $rName . '.git', 
+                    'git@github.com:' . $rName . '.git'
+                ]);
+
+                $upsert = $pdo->prepare('INSERT INTO repository_metadata (repository_id, user_id, detected_db, detected_auth, assigned_ai_tool, assigned_prompt_tool, updated_at) 
+                    VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP) 
+                    ON DUPLICATE KEY UPDATE 
+                    detected_db = COALESCE(VALUES(detected_db), detected_db),
+                    detected_auth = COALESCE(VALUES(detected_auth), detected_auth),
+                    assigned_ai_tool = COALESCE(VALUES(assigned_ai_tool), assigned_ai_tool),
+                    assigned_prompt_tool = COALESCE(VALUES(assigned_prompt_tool), assigned_prompt_tool),
+                    updated_at = CURRENT_TIMESTAMP');
+                $upsert->execute([$repoId, $userId, $detectedDb, $detectedAuth, $assignedAiTool, $assignedPromptTool]);
+
+                json_response(['ok' => true, 'persisted' => true]);
+            }
+
+            json_response(['ok' => true, 'persisted' => false, 'notice' => 'Persisted locally in browser.']);
+        }
+
         // Action: Single Repo AST Tree Inspection
         if ($action === 'inspect') {
             require_method('GET');
@@ -333,13 +383,39 @@ try {
             json_response(['ok' => true, 'inspection' => $inspection]);
         }
 
-        // Action: Fetch All Repositories with Pagination and Caching
+        // Action: Fetch All Repositories with Pagination, Caching and Metadata Merge
         require_method('GET');
+        $userId = current_user_id();
         $forceRefresh = isset($_GET['refresh']) && ($_GET['refresh'] === '1' || $_GET['refresh'] === 'true');
         $cacheDir = __DIR__ . '/cache';
         $cacheFile = $cacheDir . '/repos_cache.json';
         $cacheEnabled = !empty($config['cache_enabled']);
         $cacheTtl = (int) ($config['cache_ttl'] ?? 300);
+
+        // Helper to attach metadata to repositories
+        $attachMetadata = function(array $repos) use ($userId): array {
+            if ($userId === null || !db_available()) {
+                return $repos;
+            }
+            try {
+                $pdo = db();
+                $mStmt = $pdo->prepare('SELECT repository_id, detected_db, detected_auth, assigned_ai_tool, assigned_prompt_tool FROM repository_metadata WHERE user_id = ?');
+                $mStmt->execute([$userId]);
+                $map = [];
+                while ($row = $mStmt->fetch()) {
+                    $map[(int) $row['repository_id']] = [
+                        'detected_db' => $row['detected_db'] ?? null,
+                        'detected_auth' => $row['detected_auth'] ?? null,
+                        'assigned_ai_tool' => $row['assigned_ai_tool'] ?? null,
+                        'assigned_prompt_tool' => $row['assigned_prompt_tool'] ?? null,
+                    ];
+                }
+                foreach ($repos as &$r) {
+                    $r['metadata'] = $map[(int) $r['id']] ?? null;
+                }
+            } catch (Throwable $_) {}
+            return $repos;
+        };
 
         if ($cacheEnabled && !$forceRefresh && file_exists($cacheFile)) {
             $mtime = filemtime($cacheFile);
@@ -348,6 +424,8 @@ try {
                 if (is_array($cachedPayload) && isset($cachedPayload['repositories'])) {
                     $cachedPayload['cached'] = true;
                     $cachedPayload['cached_age_seconds'] = time() - $mtime;
+                    $cachedPayload['last_sync_timestamp'] = gmdate('c', $mtime);
+                    $cachedPayload['repositories'] = $attachMetadata($cachedPayload['repositories']);
                     json_response($cachedPayload);
                 }
             }
@@ -419,6 +497,7 @@ try {
             $page++;
         }
 
+        $nowIso = gmdate('c');
         $responsePayload = [
             'ok' => true,
             'user' => $userProfile,
@@ -430,7 +509,8 @@ try {
             ],
             'rate_limit' => parse_rate_limits($lastHeaders),
             'cached' => false,
-            'cached_at' => date('c'),
+            'cached_at' => $nowIso,
+            'last_sync_timestamp' => $nowIso,
             'repositories' => $allRepos,
         ];
 
@@ -439,6 +519,7 @@ try {
             @file_put_contents($cacheFile, json_encode($responsePayload, JSON_UNESCAPED_SLASHES));
         }
 
+        $responsePayload['repositories'] = $attachMetadata($responsePayload['repositories']);
         json_response($responsePayload);
     }
 
@@ -451,6 +532,203 @@ try {
         $sub = (string) ($_GET['sub'] ?? 'all');
         $criticalUnlocked = (int) ($_SESSION['critical_unlocked_until'] ?? 0) > time();
 
+        // 3.1 Create or Update Account
+        if ($action === 'account') {
+            if ($method === 'POST') {
+                require_csrf();
+                $data = read_json_body();
+                $accountId = !empty($data['id']) ? trim((string) $data['id']) : uuid_v4();
+                $sectorId = !empty($data['sectorId']) ? trim((string) $data['sectorId']) : null;
+                $title = trim((string) ($data['title'] ?? ''));
+                $url = !empty($data['url']) ? trim((string) $data['url']) : null;
+                $authType = (string) ($data['authType'] ?? 'CREDENTIALS');
+                $logicRule = (string) ($data['logicRule'] ?? 'CUSTOM');
+                $customUser = !empty($data['customUsername']) ? trim((string) $data['customUsername']) : null;
+                $customPass = vault_encrypt(!empty($data['customPassword']) ? (string) $data['customPassword'] : null);
+                $category = (string) ($data['category'] ?? 'GENERAL');
+                $mobileNumber = !empty($data['mobileNumber']) ? trim((string) $data['mobileNumber']) : null;
+                $sharedWithTeam = !empty($data['sharedWithTeam']) ? 1 : 0;
+                $dbInfo = vault_encrypt(!empty($data['dbInfo']) ? (string) $data['dbInfo'] : null);
+                $apiKey = vault_encrypt(!empty($data['apiKey']) ? (string) $data['apiKey'] : null);
+                $notes = !empty($data['notes']) ? trim((string) $data['notes']) : null;
+                $linkedRepoId = !empty($data['linkedRepoId']) ? (int) $data['linkedRepoId'] : 0;
+
+                if ($title === '') {
+                    json_response(['ok' => false, 'error' => 'Account title is required.'], 422);
+                }
+
+                $upsertAccount = $pdo->prepare('INSERT INTO accounts 
+                    (id, user_id, sector_id, title, url, auth_type, logic_rule, custom_username, custom_password, category, mobile_number, shared_with_team, db_info, api_key, notes, updated_at) 
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP) 
+                    ON DUPLICATE KEY UPDATE 
+                    sector_id = VALUES(sector_id),
+                    title = VALUES(title),
+                    url = VALUES(url),
+                    auth_type = VALUES(auth_type),
+                    logic_rule = VALUES(logic_rule),
+                    custom_username = VALUES(custom_username),
+                    custom_password = VALUES(custom_password),
+                    category = VALUES(category),
+                    mobile_number = VALUES(mobile_number),
+                    shared_with_team = VALUES(shared_with_team),
+                    db_info = VALUES(db_info),
+                    api_key = VALUES(api_key),
+                    notes = VALUES(notes),
+                    updated_at = CURRENT_TIMESTAMP');
+                $upsertAccount->execute([
+                    $accountId, $userId, $sectorId, $title, $url, $authType, $logicRule, $customUser, $customPass,
+                    $category, $mobileNumber, $sharedWithTeam, $dbInfo, $apiKey, $notes
+                ]);
+
+                // Manage repository link if requested
+                if ($linkedRepoId > 0) {
+                    $linkId = uuid_v4();
+                    $linkStmt = $pdo->prepare('INSERT INTO repo_vault_links (id, user_id, repository_id, account_id, link_nature) 
+                        VALUES (?, ?, ?, ?, "PRIMARY_HOSTING") 
+                        ON DUPLICATE KEY UPDATE link_nature = VALUES(link_nature)');
+                    $linkStmt->execute([$linkId, $userId, $linkedRepoId, $accountId]);
+                }
+
+                json_response(['ok' => true, 'accountId' => $accountId], 200);
+            }
+
+            if ($method === 'DELETE') {
+                require_csrf();
+                $id = trim((string) ($_GET['id'] ?? ''));
+                if ($id === '') {
+                    json_response(['ok' => false, 'error' => 'Account ID is required.'], 422);
+                }
+                $del = $pdo->prepare('DELETE FROM accounts WHERE id = ? AND user_id = ?');
+                $del->execute([$id, $userId]);
+                json_response(['ok' => true]);
+            }
+        }
+
+        // 3.2 Create or Update Access Group / Sector
+        if ($action === 'sector') {
+            if ($method === 'POST') {
+                require_csrf();
+                $data = read_json_body();
+                $sectorId = !empty($data['id']) ? trim((string) $data['id']) : uuid_v4();
+                $name = trim((string) ($data['name'] ?? ''));
+                $defaultUser = !empty($data['defaultUsername']) ? trim((string) $data['defaultUsername']) : null;
+                $defaultPass = vault_encrypt(!empty($data['defaultPassword']) ? (string) $data['defaultPassword'] : null);
+                $isSharedVault = !empty($data['isSharedVault']) ? 1 : 0;
+
+                if ($name === '') {
+                    json_response(['ok' => false, 'error' => 'Access Group name is required.'], 422);
+                }
+
+                $upsertSector = $pdo->prepare('INSERT INTO sectors 
+                    (id, user_id, name, default_username, default_password, is_shared_vault) 
+                    VALUES (?, ?, ?, ?, ?, ?) 
+                    ON DUPLICATE KEY UPDATE 
+                    name = VALUES(name),
+                    default_username = VALUES(default_username),
+                    default_password = VALUES(default_password),
+                    is_shared_vault = VALUES(is_shared_vault)');
+                $upsertSector->execute([$sectorId, $userId, $name, $defaultUser, $defaultPass, $isSharedVault]);
+
+                json_response(['ok' => true, 'sectorId' => $sectorId], 200);
+            }
+
+            if ($method === 'DELETE') {
+                require_csrf();
+                $id = trim((string) ($_GET['id'] ?? ''));
+                if ($id === '') {
+                    json_response(['ok' => false, 'error' => 'Sector ID is required.'], 422);
+                }
+                $del = $pdo->prepare('DELETE FROM sectors WHERE id = ? AND user_id = ?');
+                $del->execute([$id, $userId]);
+                json_response(['ok' => true]);
+            }
+        }
+
+        // 3.3 Credential Pool Item Operations
+        if ($action === 'pool') {
+            if ($method === 'GET') {
+                $stmt = $pdo->prepare('SELECT id, item_type, value_enc, source, use_count, last_used_at, created_at FROM credential_pool_items WHERE user_id = ? ORDER BY use_count DESC, created_at DESC');
+                $stmt->execute([$userId]);
+                $items = array_map(function($r) {
+                    return [
+                        'id' => $r['id'],
+                        'itemType' => $r['item_type'],
+                        'value' => vault_decrypt($r['value_enc'] ?? null) ?? '',
+                        'source' => $r['source'],
+                        'useCount' => (int) $r['use_count'],
+                        'lastUsedAt' => $r['last_used_at'],
+                        'createdAt' => $r['created_at'],
+                    ];
+                }, $stmt->fetchAll());
+                json_response(['ok' => true, 'pool' => $items]);
+            }
+
+            if ($method === 'POST') {
+                require_csrf();
+                $data = read_json_body();
+                $val = trim((string) ($data['value'] ?? ''));
+                $itemType = strtoupper(trim((string) ($data['itemType'] ?? 'PASSWORD')));
+                $source = (string) ($data['source'] ?? 'MANUAL');
+
+                if ($val === '') {
+                    json_response(['ok' => false, 'error' => 'Item value cannot be empty.'], 422);
+                }
+
+                $id = uuid_v4();
+                $valHash = hash('sha256', $val);
+                $valEnc = vault_encrypt($val);
+
+                $ins = $pdo->prepare('INSERT INTO credential_pool_items 
+                    (id, user_id, item_type, value_enc, value_hash, source, use_count, last_used_at) 
+                    VALUES (?, ?, ?, ?, ?, ?, 1, CURRENT_TIMESTAMP) 
+                    ON DUPLICATE KEY UPDATE 
+                    use_count = use_count + 1,
+                    last_used_at = CURRENT_TIMESTAMP');
+                $ins->execute([$id, $userId, $itemType, $valEnc, $valHash, $source]);
+
+                json_response(['ok' => true, 'itemId' => $id]);
+            }
+
+            if ($method === 'DELETE') {
+                require_csrf();
+                $id = trim((string) ($_GET['id'] ?? ''));
+                $del = $pdo->prepare('DELETE FROM credential_pool_items WHERE id = ? AND user_id = ?');
+                $del->execute([$id, $userId]);
+                json_response(['ok' => true]);
+            }
+        }
+
+        // 3.4 Rotate Shared Passwords
+        if ($action === 'rotate_shared') {
+            require_method('POST');
+            require_csrf();
+            $data = read_json_body();
+            $newPassword = (string) ($data['newPassword'] ?? '');
+            $sectorId = !empty($data['sectorId']) ? trim((string) $data['sectorId']) : null;
+
+            if ($newPassword === '') {
+                json_response(['ok' => false, 'error' => 'New password cannot be empty.'], 422);
+            }
+
+            $enc = vault_encrypt($newPassword);
+
+            if ($sectorId !== null) {
+                $upSector = $pdo->prepare('UPDATE sectors SET default_password = ? WHERE id = ? AND user_id = ?');
+                $upSector->execute([$enc, $sectorId, $userId]);
+            }
+
+            // Update user shared password
+            $upUser = $pdo->prepare('UPDATE users SET shared_pass = ? WHERE id = ?');
+            $upUser->execute([$enc, $userId]);
+
+            // Update all accounts set to SHARED_PASS logic rule or shared with team
+            $upAcc = $pdo->prepare('UPDATE accounts SET custom_password = ? WHERE user_id = ? AND (logic_rule = "SHARED_PASS" OR shared_with_team = 1)');
+            $upAcc->execute([$enc, $userId]);
+
+            json_response(['ok' => true, 'message' => 'Shared passwords updated successfully.']);
+        }
+
+        // 3.5 Full Vault State Query (default sub=all)
         if ($sub === 'all') {
             require_method('GET');
 
@@ -497,11 +775,36 @@ try {
                 ];
             }, $aStmt->fetchAll());
 
+            // Fetch credential pool
+            $pStmt = $pdo->prepare('SELECT id, item_type, value_enc, source, use_count, last_used_at, created_at FROM credential_pool_items WHERE user_id = ? ORDER BY use_count DESC, created_at DESC LIMIT 50');
+            $pStmt->execute([$userId]);
+            $pool = array_map(function($r) {
+                return [
+                    'id' => $r['id'],
+                    'itemType' => $r['item_type'],
+                    'value' => vault_decrypt($r['value_enc'] ?? null) ?? '',
+                    'source' => $r['source'],
+                    'useCount' => (int) $r['use_count'],
+                    'lastUsedAt' => $r['last_used_at'],
+                ];
+            }, $pStmt->fetchAll());
+
+            // Fetch Smart Links
+            $lStmt = $pdo->prepare('SELECT l.id, l.repository_id, l.account_id, l.link_nature, a.title AS account_title, a.url AS account_url, r.name AS repo_name 
+                FROM repo_vault_links l 
+                INNER JOIN accounts a ON a.id = l.account_id 
+                LEFT JOIN repositories r ON r.id = l.repository_id 
+                WHERE l.user_id = ?');
+            $lStmt->execute([$userId]);
+            $links = $lStmt->fetchAll();
+
             json_response([
                 'ok' => true,
                 'vault' => [
                     'sectors' => $sectors,
                     'accounts' => $accounts,
+                    'credentialPool' => $pool,
+                    'links' => $links,
                     'criticalUnlocked' => $criticalUnlocked,
                 ],
             ]);
