@@ -30,10 +30,30 @@ export class ExplorerModule {
     this.languageFilter = 'all';
     this.sortBy = 'updated_desc';
     this.viewMode = localStorage.getItem('polymer_view_mode') || 'list';
-
     this.inspections = {};
     this.metadata = {};
     this.initLocalStorage();
+    this.bindGlobalListeners();
+  }
+
+  bindGlobalListeners() {
+    window.addEventListener('polymer:switch-view', (e) => {
+      const { view, repoId, repoName } = e.detail || {};
+      if (view === 'explorer') {
+        let targetName = repoName || '';
+        if (!targetName && repoId) {
+          const r = this.repositories.find(x => x.id === parseInt(repoId));
+          if (r) targetName = r.name;
+        }
+        if (targetName) {
+          this.searchQuery = targetName;
+          const searchInput = document.getElementById('inputSearchRepos');
+          if (searchInput) searchInput.value = targetName;
+          this.applyFilters();
+          this.render();
+        }
+      }
+    });
   }
 
   initLocalStorage() {

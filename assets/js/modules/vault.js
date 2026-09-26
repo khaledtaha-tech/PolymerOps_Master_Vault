@@ -98,6 +98,15 @@ export class VaultModule {
             <button id="btnOpenAuthModal" class="btn-primary text-xs">Sign In / Register</button>
           </div>
         `;
+        const sidebarEl = document.getElementById('vaultSidebar');
+        if (sidebarEl) {
+          sidebarEl.innerHTML = `
+            <div class="text-center py-6 text-xs text-[#8b949e] space-y-2">
+              <div class="font-semibold text-[#e6edf3]">Vault Locked</div>
+              <p>Sign in to view Access Groups and Accounts.</p>
+            </div>
+          `;
+        }
         document.getElementById('btnOpenAuthModal')?.addEventListener('click', () => {
           modals.open('authModal');
         });
@@ -144,11 +153,26 @@ export class VaultModule {
   applyFilters() {
     let list = [...this.accounts];
 
-    // Filter by Smart Link Repo if active
+    // Filter by Smart Link Repo if active (Supports relational link ID, domain, and name matching)
     if (this.activeRepoFilter !== null) {
       const repoLinks = this.links.filter(l => parseInt(l.repository_id) === this.activeRepoFilter);
       const linkedAccountIds = repoLinks.map(l => String(l.account_id));
-      list = list.filter(acc => linkedAccountIds.includes(String(acc.id)));
+      const cleanName = (this.activeRepoName || '').toLowerCase().replace(/[-_]/g, ' ').trim();
+      const rawName = (this.activeRepoName || '').toLowerCase().trim();
+
+      list = list.filter(acc => {
+        // 1. Direct relational binding in repo_vault_links
+        if (linkedAccountIds.includes(String(acc.id))) return true;
+
+        // 2. Name or domain synergy fallback matching
+        if (rawName && rawName.length > 2) {
+          const title = (acc.title || '').toLowerCase();
+          const url = (acc.url || '').toLowerCase();
+          if (title.includes(rawName) || url.includes(rawName)) return true;
+          if (cleanName && cleanName.length > 2 && (title.includes(cleanName) || url.includes(cleanName))) return true;
+        }
+        return false;
+      });
     }
 
     // Sidebar View

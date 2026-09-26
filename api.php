@@ -301,16 +301,6 @@ try {
     // Resource 2: REPOS (GitHub Explorer)
     // -------------------------------------------------------------------------
     if ($resource === 'repos') {
-        global $config;
-        $token = trim((string) ($config['github_token'] ?? ''));
-        if (empty($token) || $token === 'YOUR_GITHUB_PERSONAL_ACCESS_TOKEN_HERE') {
-            json_response([
-                'ok' => false,
-                'error' => 'GitHub Personal Access Token is not configured. Add your token to config.php or set GITHUB_TOKEN.',
-                'code' => 'TOKEN_REQUIRED'
-            ], 401);
-        }
-
         // Action: Update Repository Metadata (Database, Auth, AI Dev Tool, Prompt Tool)
         if ($action === 'metadata') {
             require_method('POST', 'PATCH');
@@ -359,6 +349,16 @@ try {
             }
 
             json_response(['ok' => true, 'persisted' => false, 'notice' => 'Persisted locally in browser.']);
+        }
+
+        global $config;
+        $token = trim((string) ($config['github_token'] ?? ''));
+        if (empty($token) || $token === 'YOUR_GITHUB_PERSONAL_ACCESS_TOKEN_HERE') {
+            json_response([
+                'ok' => false,
+                'error' => 'GitHub Personal Access Token is not configured. Add your token to config.php or set GITHUB_TOKEN.',
+                'code' => 'TOKEN_REQUIRED'
+            ], 401);
         }
 
         // Action: Single Repo AST Tree Inspection
@@ -585,8 +585,11 @@ try {
                     $linkId = uuid_v4();
                     $linkStmt = $pdo->prepare('INSERT INTO repo_vault_links (id, user_id, repository_id, account_id, link_nature) 
                         VALUES (?, ?, ?, ?, "PRIMARY_HOSTING") 
-                        ON DUPLICATE KEY UPDATE link_nature = VALUES(link_nature)');
+                        ON DUPLICATE KEY UPDATE repository_id = VALUES(repository_id), link_nature = VALUES(link_nature)');
                     $linkStmt->execute([$linkId, $userId, $linkedRepoId, $accountId]);
+                } elseif (isset($data['linkedRepoId']) && (int) $data['linkedRepoId'] === 0) {
+                    $delLink = $pdo->prepare('DELETE FROM repo_vault_links WHERE user_id = ? AND account_id = ?');
+                    $delLink->execute([$userId, $accountId]);
                 }
 
                 json_response(['ok' => true, 'accountId' => $accountId], 200);
