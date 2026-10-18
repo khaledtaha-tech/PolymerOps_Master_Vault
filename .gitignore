@@ -20,3 +20,7 @@ Desktop.ini
 .idea/
 *.sublime-project
 *.sublime-workspace
+
+# Local Runner Wrapper
+powershell.cmd
+

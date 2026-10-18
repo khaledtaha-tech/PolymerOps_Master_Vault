@@ -54,8 +54,24 @@ return [
      */
     'reset_email_from' => getenv('RESET_EMAIL_FROM') ?: 'noreply@polymerops.internal',
 
+    /**
+     * Dedicated security key to guard HTTP execution of tools/migrate.php
+     * (Not required when running via CLI).
+     */
+    'migration_key' => getenv('POLYMER_MIGRATION_KEY') ?: 'CHANGE_TO_A_SECURE_MIGRATION_SECRET_KEY',
+
     // =========================================================================
-    // 3. GitHub Explorer & Reconnaissance API
+    // 3. Optional Legacy Database Migration Source (tools/migrate.php)
+    // =========================================================================
+    'legacy_db_host' => getenv('POLYMER_LEGACY_DB_HOST') ?: 'localhost',
+    'legacy_db_name' => getenv('POLYMER_LEGACY_DB_NAME') ?: '',
+    'legacy_db_user' => getenv('POLYMER_LEGACY_DB_USER') ?: '',
+    'legacy_db_pass' => getenv('POLYMER_LEGACY_DB_PASS') ?: '',
+    'legacy_db_port' => (int)(getenv('POLYMER_LEGACY_DB_PORT') ?: 3306),
+    'legacy_app_key' => getenv('POLYMER_LEGACY_APP_KEY') ?: '',
+
+    // =========================================================================
+    // 4. GitHub Explorer & Reconnaissance API
     // =========================================================================
     /**
      * GitHub Personal Access Token (Classic with 'repo' scope or Fine-Grained token)
