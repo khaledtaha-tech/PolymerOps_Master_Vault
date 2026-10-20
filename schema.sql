@@ -168,6 +168,33 @@ CREATE TABLE IF NOT EXISTS account_relationships (
         ON DELETE CASCADE ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+CREATE TABLE IF NOT EXISTS account_security_profiles (
+    account_id CHAR(36) NOT NULL,
+    user_id BIGINT UNSIGNED NOT NULL,
+    recovery_account_id CHAR(36) NULL,
+    twofa_account_id CHAR(36) NULL,
+    backup_account_id CHAR(36) NULL,
+    is_critical TINYINT(1) NOT NULL DEFAULT 0,
+    display_category VARCHAR(100) NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (account_id),
+    KEY idx_security_user (user_id),
+    KEY idx_security_recovery (recovery_account_id),
+    KEY idx_security_twofa (twofa_account_id),
+    KEY idx_security_backup (backup_account_id),
+    CONSTRAINT fk_security_account FOREIGN KEY (account_id) REFERENCES accounts(id)
+        ON DELETE CASCADE ON UPDATE CASCADE,
+    CONSTRAINT fk_security_user FOREIGN KEY (user_id) REFERENCES users(id)
+        ON DELETE CASCADE ON UPDATE CASCADE,
+    CONSTRAINT fk_security_recovery FOREIGN KEY (recovery_account_id) REFERENCES accounts(id)
+        ON DELETE SET NULL ON UPDATE CASCADE,
+    CONSTRAINT fk_security_twofa FOREIGN KEY (twofa_account_id) REFERENCES accounts(id)
+        ON DELETE SET NULL ON UPDATE CASCADE,
+    CONSTRAINT fk_security_backup FOREIGN KEY (backup_account_id) REFERENCES accounts(id)
+        ON DELETE SET NULL ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 CREATE TABLE IF NOT EXISTS access_group_profiles (
     sector_id CHAR(36) NOT NULL,
     user_id BIGINT UNSIGNED NOT NULL,
