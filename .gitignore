@@ -1,5 +1,8 @@
 # Environment & Secret Configurations
 config.php
+.env
+.env.*
+!.env.example
 
 # Ephemeral File Cache
 cache/

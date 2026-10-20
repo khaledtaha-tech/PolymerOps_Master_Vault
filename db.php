@@ -21,6 +21,31 @@ header('X-Content-Type-Options: nosniff');
 header('X-Frame-Options: DENY');
 header('Referrer-Policy: no-referrer');
 
+// Automatically parse and load .env file if present
+$envFile = __DIR__ . '/.env';
+if (file_exists($envFile)) {
+    $envLines = @file($envFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
+    if (is_array($envLines)) {
+        foreach ($envLines as $line) {
+            $line = trim($line);
+            if ($line === '' || str_starts_with($line, '#')) {
+                continue;
+            }
+            $pos = strpos($line, '=');
+            if ($pos !== false) {
+                $name = trim(substr($line, 0, $pos));
+                $val = trim(substr($line, $pos + 1));
+                if ((str_starts_with($val, '"') && str_ends_with($val, '"')) || (str_starts_with($val, "'") && str_ends_with($val, "'"))) {
+                    $val = substr($val, 1, -1);
+                }
+                putenv("{$name}={$val}");
+                $_ENV[$name] = $val;
+                $_SERVER[$name] = $val;
+            }
+        }
+    }
+}
+
 // Load Configuration with Graceful Fallback
 $configFile = __DIR__ . '/config.php';
 $exampleConfigFile = __DIR__ . '/config.example.php';
