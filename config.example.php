@@ -45,14 +45,46 @@ return [
     'google_client_id' => getenv('GOOGLE_CLIENT_ID') ?: '',
 
     /**
+     * Google OAuth 2.0 Client Secret (optional for server-side code exchange)
+     */
+    'google_client_secret' => getenv('GOOGLE_CLIENT_SECRET') ?: '',
+
+    /**
+     * Google OAuth 2.0 Authorized Redirect URI
+     */
+    'google_redirect_uri' => getenv('GOOGLE_REDIRECT_URI') ?: 'https://master.polymerops.com/auth.php?action=google_callback',
+
+    /**
+     * Allowed Google SSO emails (comma-separated or empty to allow any registered vault account)
+     */
+    'allowed_emails' => getenv('ALLOWED_EMAILS') ?: 'khaled.taha.pro@gmail.com',
+
+    /**
      * Enable new user registration (Keep false for solo / private operations)
      */
     'allow_registration' => filter_var(getenv('ALLOW_REGISTRATION') ?: false, FILTER_VALIDATE_BOOLEAN),
 
     /**
-     * Outbound email address for password reset dispatches
+     * Application Public Base URL
      */
-    'reset_email_from' => getenv('RESET_EMAIL_FROM') ?: 'noreply@polymerops.internal',
+    'app_url' => getenv('APP_URL') ?: 'https://master.polymerops.com',
+
+    /**
+     * Hostinger SMTP Outbound Mail Configuration
+     */
+    'smtp_enabled' => filter_var(getenv('SMTP_ENABLED') ?: true, FILTER_VALIDATE_BOOLEAN),
+    'smtp_host' => getenv('SMTP_HOST') ?: 'smtp.hostinger.com',
+    'smtp_port' => (int)(getenv('SMTP_PORT') ?: 465),
+    'smtp_secure' => getenv('SMTP_SECURE') ?: 'ssl', // 'ssl' (port 465) or 'tls' (port 587)
+    'smtp_user' => getenv('SMTP_USER') ?: '',
+    'smtp_pass' => getenv('SMTP_PASS') ?: '',
+    'smtp_from' => getenv('SMTP_FROM') ?: 'noreply@polymerops.com',
+    'smtp_from_name' => getenv('SMTP_FROM_NAME') ?: 'PolymerOps Master Vault',
+
+    /**
+     * Outbound email address for password reset dispatches (legacy fallback)
+     */
+    'reset_email_from' => getenv('RESET_EMAIL_FROM') ?: 'noreply@polymerops.com',
 
     /**
      * Dedicated security key to guard HTTP execution of tools/migrate.php

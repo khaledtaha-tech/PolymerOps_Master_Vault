@@ -18,6 +18,12 @@ $resource = (string) ($_GET['resource'] ?? 'status');
 $action = (string) ($_GET['action'] ?? '');
 $method = strtoupper($_SERVER['REQUEST_METHOD'] ?? 'GET');
 
+// Route authentication actions directly to auth gateway
+if ($action !== '' && in_array($action, ['google_callback', 'google_login', 'google_redirect', 'login', 'logout', 'session', 'forgot_password', 'verify_reset_token', 'reset_password'], true)) {
+    require __DIR__ . '/auth.php';
+    exit;
+}
+
 // =============================================================================
 // Helper Functions for GitHub API Communication & AST Inspection
 // =============================================================================

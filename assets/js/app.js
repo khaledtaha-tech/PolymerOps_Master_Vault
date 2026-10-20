@@ -28,6 +28,14 @@ class PolymerOpsApp {
     notes.init();
     this.bindEvents();
 
+    // Check for URL authentication notices / errors
+    const urlParams = new URLSearchParams(window.location.search);
+    const authError = urlParams.get('auth_error');
+    if (authError) {
+      toast.error(`Authentication: ${authError.replace(/_/g, ' ')}`);
+      window.history.replaceState({}, document.title, window.location.pathname);
+    }
+
     try {
       // 1. Check System Status
       const statusRes = await api.get('api.php?resource=status');
@@ -45,7 +53,17 @@ class PolymerOpsApp {
         this.renderUserPill(sessionRes);
       }
 
-      // 3. Load Explorer and Synergy
+      // 3. Discover Public Auth Configuration (e.g. Google Client ID)
+      try {
+        const authConfig = await api.get('auth.php?action=config');
+        if (authConfig.ok && authConfig.googleClientId) {
+          this.initGoogleAuth(authConfig.googleClientId);
+        }
+      } catch (authCfgErr) {
+        console.warn('Auth config discovery warning:', authCfgErr);
+      }
+
+      // 4. Load Explorer and Synergy
       await synergy.loadLinks();
       await explorer.loadRepositories();
 
@@ -55,6 +73,58 @@ class PolymerOpsApp {
       }
     } catch (err) {
       console.error('PolymerOps Bootstrap Exception:', err);
+    }
+  }
+
+  initGoogleAuth(clientId) {
+    if (!clientId) return;
+
+    const setupGsi = () => {
+      if (!window.google || !window.google.accounts || !window.google.accounts.id) {
+        return false;
+      }
+      try {
+        window.google.accounts.id.initialize({
+          client_id: clientId,
+          callback: async (response) => {
+            try {
+              const res = await api.post('auth.php?action=google_login', { credential: response.credential });
+              if (res.ok) {
+                toast.success('Signed in via Google successfully');
+                modals.close('authModal');
+                window.location.reload();
+              }
+            } catch (err) {
+              toast.error(`Google authentication failed: ${err.message}`);
+            }
+          }
+        });
+
+        const container = document.getElementById('googleButtonContainer');
+        if (container) {
+          window.google.accounts.id.renderButton(container, {
+            theme: 'filled_black',
+            size: 'large',
+            shape: 'rectangular',
+            width: 280,
+          });
+        }
+        return true;
+      } catch (err) {
+        console.error('GIS initialization exception:', err);
+        return false;
+      }
+    };
+
+    if (!setupGsi()) {
+      // Retry after slight delay if script was loading asynchronously
+      let retries = 0;
+      const interval = setInterval(() => {
+        retries++;
+        if (setupGsi() || retries > 10) {
+          clearInterval(interval);
+        }
+      }, 500);
     }
   }
 
@@ -476,6 +546,99 @@ class PolymerOpsApp {
       document.getElementById('btnCopyGenerated')?.addEventListener('click', async () => {
         await security.copyToClipboard(genOutput.value);
         toast.success('Generated password copied to clipboard');
+      });
+    }
+
+    // =========================================================================
+    // Universal Password Visibility Toggle (Magic Eye)
+    // =========================================================================
+    document.addEventListener('click', (e) => {
+      const toggleBtn = e.target.closest('.password-toggle-btn');
+      if (!toggleBtn) return;
+      e.preventDefault();
+      const targetId = toggleBtn.getAttribute('data-target');
+      const input = targetId ? document.getElementById(targetId) : toggleBtn.parentElement.querySelector('input');
+      if (!input) return;
+
+      const isPassword = (input.type === 'password');
+      input.type = isPassword ? 'text' : 'password';
+
+      const eyeOpen = toggleBtn.querySelector('.eye-open');
+      const eyeClosed = toggleBtn.querySelector('.eye-closed');
+      if (eyeOpen && eyeClosed) {
+        eyeOpen.classList.toggle('hidden', isPassword);
+        eyeClosed.classList.toggle('hidden', !isPassword);
+      }
+    });
+
+    // =========================================================================
+    // Authentication Modal Tabs Switcher (Google SSO vs Credentials)
+    // =========================================================================
+    const tabBtnGoogle = document.getElementById('tabBtnGoogle');
+    const tabBtnCredentials = document.getElementById('tabBtnCredentials');
+    const authPaneGoogle = document.getElementById('authPaneGoogle');
+    const authPaneCredentials = document.getElementById('authPaneCredentials');
+
+    const switchAuthTab = (mode) => {
+      if (mode === 'google') {
+        tabBtnGoogle?.classList.add('bg-[#30363d]', 'text-[#e6edf3]');
+        tabBtnGoogle?.classList.remove('text-[#8b949e]');
+        tabBtnCredentials?.classList.remove('bg-[#30363d]', 'text-[#e6edf3]');
+        tabBtnCredentials?.classList.add('text-[#8b949e]');
+        authPaneGoogle?.classList.remove('hidden');
+        authPaneCredentials?.classList.add('hidden');
+      } else {
+        tabBtnCredentials?.classList.add('bg-[#30363d]', 'text-[#e6edf3]');
+        tabBtnCredentials?.classList.remove('text-[#8b949e]');
+        tabBtnGoogle?.classList.remove('bg-[#30363d]', 'text-[#e6edf3]');
+        tabBtnGoogle?.classList.add('text-[#8b949e]');
+        authPaneCredentials?.classList.remove('hidden');
+        authPaneGoogle?.classList.add('hidden');
+      }
+    };
+
+    tabBtnGoogle?.addEventListener('click', () => switchAuthTab('google'));
+    tabBtnCredentials?.addEventListener('click', () => switchAuthTab('credentials'));
+
+    // =========================================================================
+    // Forgot Password Flow
+    // =========================================================================
+    document.getElementById('btnForgotTrigger')?.addEventListener('click', () => {
+      modals.close('authModal');
+      modals.open('forgotModal');
+      document.getElementById('forgotEmail')?.focus();
+    });
+
+    document.getElementById('btnBackToLogin')?.addEventListener('click', () => {
+      modals.close('forgotModal');
+      modals.open('authModal');
+      switchAuthTab('credentials');
+    });
+
+    const formForgot = document.getElementById('formForgotPassword');
+    if (formForgot) {
+      formForgot.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const email = document.getElementById('forgotEmail').value.trim();
+        const submitBtn = document.getElementById('btnSendResetLink');
+        if (!email) return;
+
+        try {
+          if (submitBtn) {
+            submitBtn.disabled = true;
+            submitBtn.innerHTML = '<span>Sending Link...</span>';
+          }
+          const res = await api.post('auth.php?action=forgot_password', { email });
+          toast.success(res.message || 'Recovery email dispatched.');
+          modals.close('forgotModal');
+        } catch (err) {
+          toast.error(`Dispatch error: ${err.message}`);
+        } finally {
+          if (submitBtn) {
+            submitBtn.disabled = false;
+            submitBtn.innerHTML = '<span>Send Recovery Link</span>';
+          }
+        }
       });
     }
 
