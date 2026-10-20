@@ -311,6 +311,70 @@ function get_known_repositories_seed(): array {
             'work_notes_completed' => 'Formulation algorithms and process parameter calculation models verified.',
             'work_notes_next_steps' => 'Integrate telemetry endpoints and connect to centralized vault.',
         ],
+        [
+            'id' => 862900105,
+            'name' => 'pvc_pipe_production',
+            'full_name' => 'khaledtaha-tech/pvc_pipe_production',
+            'owner_login' => 'khaledtaha-tech',
+            'description' => 'PVC Pipe Production Line Monitoring, Formulas, and Optimization Suite.',
+            'html_url' => 'https://github.com/khaledtaha-tech/pvc_pipe_production',
+            'homepage' => 'https://pipe1.polymerops.com',
+            'primary_language' => 'PHP',
+            'detected_db' => 'MySQL',
+            'detected_auth' => 'Standard Credentials / Session',
+            'assigned_ai_tool' => 'Antigravity',
+            'assigned_prompt_tool' => 'Production Line Architect',
+            'work_notes_completed' => 'Real-time extrusion speed calculation models implemented.',
+            'work_notes_next_steps' => 'Deploy IoT sensor bridge for production lines.',
+        ],
+        [
+            'id' => 862900106,
+            'name' => 'PWP_Manpower_Planner',
+            'full_name' => 'khaledtaha-tech/PWP_Manpower_Planner',
+            'owner_login' => 'khaledtaha-tech',
+            'description' => 'Plant Workforce & Manpower Shift Planning and Allocation Platform.',
+            'html_url' => 'https://github.com/khaledtaha-tech/PWP_Manpower_Planner',
+            'homepage' => 'https://pwp.polymerops.com',
+            'primary_language' => 'PHP / JavaScript',
+            'detected_db' => 'MySQL (u976858450_pwp)',
+            'detected_auth' => 'Google OAuth 2.0 / Session',
+            'assigned_ai_tool' => 'Cursor',
+            'assigned_prompt_tool' => 'Operations Analyst',
+            'work_notes_completed' => 'Shift scheduling and rotation calendar fully functional.',
+            'work_notes_next_steps' => 'Synchronize attendance telemetry via webhook.',
+        ],
+        [
+            'id' => 862900107,
+            'name' => 'Blown_Film_Pro',
+            'full_name' => 'khaledtaha-tech/Blown_Film_Pro',
+            'owner_login' => 'khaledtaha-tech',
+            'description' => 'Blown Film Extrusion Calculation and Thickness Optimization Platform.',
+            'html_url' => 'https://github.com/khaledtaha-tech/Blown_Film_Pro',
+            'homepage' => 'https://filmcalc.polymerops.com',
+            'primary_language' => 'PHP / Python',
+            'detected_db' => 'MySQL (u976858450_Film)',
+            'detected_auth' => 'Google OAuth 2.0 / Hostinger SMTP',
+            'assigned_ai_tool' => 'Antigravity',
+            'assigned_prompt_tool' => 'Plastics Extrusion Specialist',
+            'work_notes_completed' => 'Extrusion die output and frost line height algorithms verified.',
+            'work_notes_next_steps' => 'Connect to live plant historian database.',
+        ],
+        [
+            'id' => 862900108,
+            'name' => 'Mintle_Visit_Planner',
+            'full_name' => 'khaledtaha-tech/Mintle_Visit_Planner',
+            'owner_login' => 'khaledtaha-tech',
+            'description' => 'Customer Site Visit, Route Optimization and Field Planning Manager.',
+            'html_url' => 'https://github.com/khaledtaha-tech/Mintle_Visit_Planner',
+            'homepage' => 'https://planning.polymerops.com',
+            'primary_language' => 'JavaScript / Node.js',
+            'detected_db' => 'MySQL (Planning)',
+            'detected_auth' => 'Standard Auth / Admin Role',
+            'assigned_ai_tool' => 'v0',
+            'assigned_prompt_tool' => 'Logistics Planner',
+            'work_notes_completed' => 'Route mapping and milestone scheduling operational.',
+            'work_notes_next_steps' => 'Integrate SMS dispatch for field engineers.',
+        ],
     ];
 }
 
@@ -371,6 +435,213 @@ function seed_repositories_metadata(PDO $pdo, int $userId, MigrationLogger $logg
     }
 
     return ['seededRepositories' => $seededCount];
+}
+
+// =============================================================================
+// Module 3: Synergy Correlation Engine (Bidirectional Vault & Repo Binding)
+// =============================================================================
+
+function run_synergy_correlation(PDO $pdo, int $userId, MigrationLogger $logger): array {
+    $aStmt = $pdo->prepare('SELECT id, title, url, notes FROM accounts WHERE user_id = ?');
+    $aStmt->execute([$userId]);
+    $accounts = $aStmt->fetchAll();
+
+    $rStmt = $pdo->prepare('SELECT id, name, html_url, homepage FROM repositories WHERE user_id = ?');
+    $rStmt->execute([$userId]);
+    $repositories = $rStmt->fetchAll();
+
+    $upsertLink = $pdo->prepare('INSERT INTO repo_vault_links 
+        (id, user_id, repository_id, account_id, link_nature, created_at)
+        VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+        ON DUPLICATE KEY UPDATE 
+        repository_id = VALUES(repository_id),
+        account_id = VALUES(account_id),
+        link_nature = VALUES(link_nature)');
+
+    $linkCount = 0;
+    foreach ($repositories as $repo) {
+        $repoId = (int) $repo['id'];
+        $repoName = (string) $repo['name'];
+        $rNameNorm = strtolower(str_replace(['_', '-'], '', $repoName));
+        $rHome = strtolower(trim((string) ($repo['homepage'] ?? '')));
+        $rDomain = '';
+        if ($rHome !== '') {
+            $parsed = parse_url($rHome);
+            $rDomain = strtolower($parsed['host'] ?? $rHome);
+        }
+
+        foreach ($accounts as $acc) {
+            $accountId = (string) $acc['id'];
+            $aTitle = (string) ($acc['title'] ?? '');
+            $aUrl = (string) ($acc['url'] ?? '');
+            $aNotes = (string) ($acc['notes'] ?? '');
+
+            $aTitleLow = strtolower($aTitle);
+            $aUrlLow = strtolower($aUrl);
+            $aNotesLow = strtolower($aNotes);
+            $aTitleNorm = str_replace(['_', '-'], '', $aTitleLow);
+
+            $matched = false;
+            $nature = 'PRIMARY_HOSTING';
+
+            // 1. Domain match
+            if ($rDomain !== '' && (str_contains($aUrlLow, $rDomain) || str_contains($aTitleLow, $rDomain) || str_contains($aNotesLow, $rDomain))) {
+                $matched = true;
+            }
+
+            // 2. Normalized name match
+            if (!$matched && (str_contains($aTitleNorm, $rNameNorm) || str_contains($rNameNorm, $aTitleNorm))) {
+                $matched = true;
+            }
+
+            // 3. Domain & app aliases
+            if (!$matched) {
+                if ($repoName === 'Blown_Film_Pro' && ($aTitleLow === 'film' || str_contains($aNotesLow, 'blown_film_pro') || str_contains($aUrlLow, 'filmcalc.polymerops.com') || str_contains($aNotesLow, 'filmcalc'))) {
+                    $matched = true;
+                }
+                if ($repoName === 'Mintle_Visit_Planner' && (str_contains($aTitleLow, 'mintle') || str_contains($aTitleLow, 'planning') || str_contains($aUrlLow, 'planning.polymerops.com'))) {
+                    $matched = true;
+                }
+                if ($repoName === 'Compounding_Process_Control_New' && (str_contains($aTitleLow, 'cpc') || str_contains($aUrlLow, 'cpc.polymerops.com'))) {
+                    $matched = true;
+                }
+                if ($repoName === 'pvc_pipe_production' && (str_contains($aTitleLow, 'pipe') || str_contains($aUrlLow, 'pipe1.polymerops.com'))) {
+                    $matched = true;
+                }
+                if ($repoName === 'PolymerOps' && (str_contains($aTitleLow, 'dailyproduction') || str_contains($aTitleLow, 'repos.polymerops.com') || str_contains($aUrlLow, 'polymerops.com'))) {
+                    $matched = true;
+                }
+            }
+
+            if ($matched) {
+                if (str_contains($aNotesLow, 'data base') || str_contains($aNotesLow, 'database') || str_contains($aNotesLow, 'db_host') || str_contains($aNotesLow, 'db_name')) {
+                    $nature = 'PRODUCTION_DB';
+                }
+                $linkId = uuid_v4();
+                $upsertLink->execute([$linkId, $userId, $repoId, $accountId, $nature]);
+                $linkCount++;
+                $logger->info("Synergy Bound: {$repoName} <-> '{$aTitle}' ({$nature})");
+            }
+        }
+    }
+
+    $logger->success("Synergy correlation pass completed: {$linkCount} repository-vault bindings secured.");
+    return ['linkedCount' => $linkCount];
+}
+
+// =============================================================================
+// Module 4: Legacy SQL Dump Bundle Importer
+// =============================================================================
+
+function import_legacy_dump_bundle(PDO $pdo, string $dumpPath, MigrationLogger $logger): array {
+    if (!file_exists($dumpPath) || !is_readable($dumpPath)) {
+        throw new RuntimeException("Dump file not found or not readable: {$dumpPath}");
+    }
+
+    $logger->info("Executing legacy SQL dump migration bundle from: {$dumpPath}");
+    $sql = file_get_contents($dumpPath);
+    if ($sql === false || trim($sql) === '') {
+        throw new RuntimeException("Dump file is empty: {$dumpPath}");
+    }
+
+    // Split into individual SQL statements safely
+    $stmts = [];
+    $len = strlen($sql);
+    $inString = false;
+    $stringChar = '';
+    $escaped = false;
+    $current = '';
+
+    for ($i = 0; $i < $len; $i++) {
+        $ch = $sql[$i];
+        if (!$inString && $ch === '-' && $i + 1 < $len && $sql[$i + 1] === '-') {
+            while ($i < $len && $sql[$i] !== "\n") {
+                $i++;
+            }
+            continue;
+        }
+        if ($inString) {
+            $current .= $ch;
+            if ($escaped) {
+                $escaped = false;
+            } elseif ($ch === '\\') {
+                $escaped = true;
+            } elseif ($ch === $stringChar) {
+                if ($i + 1 < $len && $sql[$i + 1] === $stringChar) {
+                    $current .= $sql[++$i];
+                } else {
+                    $inString = false;
+                }
+            }
+        } else {
+            if ($ch === "'" || $ch === '"' || $ch === '`') {
+                $inString = true;
+                $stringChar = $ch;
+                $current .= $ch;
+            } elseif ($ch === ';') {
+                $stmt = trim($current);
+                if ($stmt !== '') {
+                    $stmts[] = $stmt;
+                }
+                $current = '';
+            } else {
+                $current .= $ch;
+            }
+        }
+    }
+
+    $executed = 0;
+    foreach ($stmts as $stmt) {
+        $upper = strtoupper(trim($stmt));
+        if ($upper === 'START TRANSACTION' || $upper === 'COMMIT') {
+            continue;
+        }
+        try {
+            $pdo->exec($stmt);
+            $executed++;
+        } catch (Throwable $e) {
+            if (str_contains($e->getMessage(), 'already exists') || str_contains($e->getMessage(), 'Duplicate key') || str_contains($e->getMessage(), 'Duplicate entry')) {
+                $logger->warn("Non-fatal DDL notice: " . $e->getMessage());
+                continue;
+            }
+            throw $e;
+        }
+    }
+
+    // Ensure khaled.taha.pro@gmail.com is established with primary ADMIN role
+    $stmtUser = $pdo->prepare('SELECT id, email, role FROM users WHERE email = ? LIMIT 1');
+    $stmtUser->execute(['khaled.taha.pro@gmail.com']);
+    $userRow = $stmtUser->fetch();
+    $adminId = 1;
+    if ($userRow) {
+        $adminId = (int) $userRow['id'];
+        $up = $pdo->prepare('UPDATE users SET role = "ADMIN", is_active = 1 WHERE id = ?');
+        $up->execute([$adminId]);
+    }
+
+    // Seed repositories and metadata
+    seed_repositories_metadata($pdo, $adminId, $logger);
+
+    // Run Synergy correlation
+    $synergyRes = run_synergy_correlation($pdo, $adminId, $logger);
+
+    // Query exact counts
+    $accCount = (int) $pdo->query('SELECT COUNT(*) FROM accounts WHERE user_id = ' . $adminId)->fetchColumn();
+    $secCount = (int) $pdo->query('SELECT COUNT(*) FROM sectors WHERE user_id = ' . $adminId)->fetchColumn();
+    $poolCount = (int) $pdo->query('SELECT COUNT(*) FROM credential_pool_items WHERE user_id = ' . $adminId)->fetchColumn();
+    $linkCount = (int) $pdo->query('SELECT COUNT(*) FROM repo_vault_links WHERE user_id = ' . $adminId)->fetchColumn();
+
+    $logger->success("Migration summary: {$accCount} accounts, {$secCount} sectors, {$poolCount} pool items, {$linkCount} synergy links active.");
+
+    return [
+        'adminId' => $adminId,
+        'adminEmail' => 'khaled.taha.pro@gmail.com',
+        'accountsMigrated' => $accCount,
+        'sectorsMigrated' => $secCount,
+        'poolItemsMigrated' => $poolCount,
+        'synergyLinksBound' => $linkCount,
+        'statementsExecuted' => $executed,
+    ];
 }
 
 // =============================================================================
@@ -687,6 +958,8 @@ function parse_cli_options(): array {
         'legacy-port:',
         'legacy-key:',
         'file:',
+        'import-dump::',
+        'synergy-sync',
         'json',
     ];
     return getopt('h', $longopts);
@@ -708,6 +981,8 @@ Core Options:
   --pin=<pin>              Master PIN for Critical Vault elevation (default: 1234).
   --role=<role>            Admin role (default: ADMIN).
   --seed-metadata          Populate default tech stacks, DBs, and notes for core repos.
+  --import-dump[=<file>]   Import all records from legacy SQL dump (default: u976858450_pass.sql), bootstrap khaled.taha.pro@gmail.com, and run Synergy correlation.
+  --synergy-sync           Re-run bidirectional Synergy correlation across all repositories and accounts.
 
 Mode A: Legacy Database Direct Migration:
   --legacy-db              Connect directly to a legacy database.
@@ -726,16 +1001,19 @@ Output Options:
   --json                   Output machine-readable JSON summary.
 
 Examples:
-  # 1. Full Fresh Bootstrap (Admin + Master PIN + Core Repo Metadata)
+  # 1. Full Legacy Dump Migration (31 Accounts, 3 Sectors, Admin + Synergy Binding)
+  php tools/migrate.php --import-dump
+
+  # 2. Full Fresh Bootstrap (Admin + Master PIN + Core Repo Metadata)
   php tools/migrate.php --create-admin --seed-metadata
 
-  # 2. Custom Admin Credentials Setup
+  # 3. Custom Admin Credentials Setup
   php tools/migrate.php --create-admin --email=khaled@polymerops.com --pin=9876 --password=MySecureVaultPass2026!
 
-  # 3. Import from JSON Payload with Cryptographic Re-Keying
+  # 4. Import from JSON Payload with Cryptographic Re-Keying
   php tools/migrate.php --file=legacy_vault_export.json --legacy-key=OldSecretKey32CharsLong...
 
-  # 4. Migrate Directly from Legacy MySQL DB
+  # 5. Migrate Directly from Legacy MySQL DB
   php tools/migrate.php --legacy-db --legacy-name=polymerops_v1 --legacy-user=root --legacy-pass=secret
 
 HELP;
@@ -782,14 +1060,16 @@ try {
         $isCreateAdmin = isset($opts['create-admin']);
         $isSeedMetadata = isset($opts['seed-metadata']);
         $isLegacyDb = isset($opts['legacy-db']);
+        $isImportDump = isset($opts['import-dump']);
+        $isSynergySync = isset($opts['synergy-sync']);
+        $dumpPath = $opts['import-dump'] ?? $opts['file'] ?? null;
         $inputFile = $opts['file'] ?? null;
         $legacyKey = (string) ($opts['legacy-key'] ?? cfg('legacy_app_key', 'POLYMER_LEGACY_APP_KEY', ''));
 
         // If no flags are provided, show help
-        if (!$isCreateAdmin && !$isSeedMetadata && !$isLegacyDb && !$inputFile) {
-            $logger->info("No action flags supplied. Running default full bootstrap: --create-admin and --seed-metadata.");
-            $isCreateAdmin = true;
-            $isSeedMetadata = true;
+        if (!$isCreateAdmin && !$isSeedMetadata && !$isLegacyDb && !$inputFile && !$isImportDump && !$isSynergySync) {
+            $logger->info("No action flags supplied. Running default legacy dump migration & Synergy correlation.");
+            $isImportDump = true;
         }
 
         $targetPdo->beginTransaction();
@@ -800,9 +1080,34 @@ try {
             'sectors' => null,
             'accounts' => null,
             'links' => null,
+            'dump_migration' => null,
         ];
 
-        // 1. Admin Bootstrap
+        // 1. Direct Legacy Dump Import
+        if ($isImportDump || ($inputFile && str_ends_with(strtolower((string)$inputFile), '.sql'))) {
+            $dumpCandidate = is_string($dumpPath) && $dumpPath !== '' ? $dumpPath : (is_string($inputFile) ? $inputFile : '');
+            $resolvedDump = null;
+            $searchPaths = [
+                $dumpCandidate,
+                __DIR__ . '/../data/migrate_u976858450_master_vault.sql',
+                __DIR__ . '/../u976858450_pass.sql',
+                'data/migrate_u976858450_master_vault.sql',
+                'u976858450_pass.sql',
+            ];
+            foreach ($searchPaths as $p) {
+                if (!empty($p) && file_exists($p) && is_readable($p)) {
+                    $resolvedDump = $p;
+                    break;
+                }
+            }
+            if (!$resolvedDump) {
+                throw new RuntimeException("Could not locate legacy migration SQL dump file (checked u976858450_pass.sql and data/migrate_u976858450_master_vault.sql).");
+            }
+            $summary['dump_migration'] = import_legacy_dump_bundle($targetPdo, $resolvedDump, $logger);
+            $adminUserId = $summary['dump_migration']['adminId'];
+        }
+
+        // 2. Admin Bootstrap
         if ($isCreateAdmin) {
             $email = (string) ($opts['email'] ?? 'admin@polymerops.com');
             $pin = (string) ($opts['pin'] ?? '1234');
@@ -822,20 +1127,20 @@ try {
 
         // Guarantee we have an admin user ID for relational integrity
         if ($adminUserId === null) {
-            $adminRes = bootstrap_admin($targetPdo, 'admin@polymerops.com', 'PolymerOpsMaster2026!', '1234', 'ADMIN');
+            $adminRes = bootstrap_admin($targetPdo, 'khaled.taha.pro@gmail.com', 'PolymerOpsMaster2026!', '1234', 'ADMIN');
             $adminUserId = $adminRes['userId'];
             $summary['admin'] = $adminRes;
             $logger->info("Initialized baseline administrator (User ID: {$adminUserId}).");
         }
 
-        // 2. Seed Repository Metadata
+        // 3. Seed Repository Metadata
         if ($isSeedMetadata) {
             $seedRes = seed_repositories_metadata($targetPdo, $adminUserId, $logger);
             $summary['metadata'] = $seedRes;
             $logger->success("Repository metadata seeding completed ({$seedRes['seededRepositories']} repos configured).");
         }
 
-        // 3. Mode A: Direct Legacy DB Migration
+        // 4. Mode A: Direct Legacy DB Migration
         if ($isLegacyDb) {
             $legacyOpts = [
                 'host' => $opts['legacy-host'] ?? null,
@@ -868,8 +1173,8 @@ try {
             }
         }
 
-        // 4. Mode B: File-based Import
-        if ($inputFile) {
+        // 5. Mode B: File-based JSON Import
+        if ($inputFile && !str_ends_with(strtolower((string)$inputFile), '.sql')) {
             $logger->info("Parsing payload file: {$inputFile}...");
             $payload = parse_import_file($inputFile);
 
@@ -885,6 +1190,11 @@ try {
             if (!empty($payload['links'])) {
                 $summary['links'] = import_repo_vault_links_data($targetPdo, $adminUserId, $payload['links'], $logger);
             }
+        }
+
+        // 6. Synergy Correlation Sync
+        if ($isSynergySync || $isImportDump) {
+            $summary['synergy_sync'] = run_synergy_correlation($targetPdo, $adminUserId, $logger);
         }
 
         $targetPdo->commit();
@@ -904,9 +1214,32 @@ try {
         $targetPdo->beginTransaction();
         $summary = [];
 
+        // 1. Direct Legacy Dump Import via HTTP
+        if ($action === 'import_dump' || $action === 'all') {
+            $dumpCandidate = (string) ($body['dump_file'] ?? $_GET['dump_file'] ?? '');
+            $resolvedDump = null;
+            $searchPaths = [
+                $dumpCandidate,
+                __DIR__ . '/../data/migrate_u976858450_master_vault.sql',
+                __DIR__ . '/../u976858450_pass.sql',
+                'data/migrate_u976858450_master_vault.sql',
+                'u976858450_pass.sql',
+            ];
+            foreach ($searchPaths as $p) {
+                if (!empty($p) && file_exists($p) && is_readable($p)) {
+                    $resolvedDump = $p;
+                    break;
+                }
+            }
+            if ($resolvedDump) {
+                $summary['dump_migration'] = import_legacy_dump_bundle($targetPdo, $resolvedDump, $logger);
+                $adminUserId = $summary['dump_migration']['adminId'];
+            }
+        }
+
         // Guarantee or bootstrap admin user
-        if ($adminUserId === null || $action === 'create_admin' || $action === 'all') {
-            $email = (string) ($body['email'] ?? $_POST['email'] ?? $_GET['email'] ?? 'admin@polymerops.com');
+        if ($adminUserId === null || $action === 'create_admin') {
+            $email = (string) ($body['email'] ?? $_POST['email'] ?? $_GET['email'] ?? 'khaled.taha.pro@gmail.com');
             $password = (string) ($body['password'] ?? $_POST['password'] ?? $_GET['password'] ?? 'PolymerOpsMaster2026!');
             $pin = (string) ($body['pin'] ?? $_POST['pin'] ?? $_GET['pin'] ?? '1234');
             $role = (string) ($body['role'] ?? $_POST['role'] ?? $_GET['role'] ?? 'ADMIN');
@@ -918,6 +1251,10 @@ try {
 
         if ($action === 'seed_metadata' || $action === 'all') {
             $summary['metadata'] = seed_repositories_metadata($targetPdo, $adminUserId, $logger);
+        }
+
+        if ($action === 'synergy_sync' || $action === 'all') {
+            $summary['synergy_sync'] = run_synergy_correlation($targetPdo, $adminUserId, $logger);
         }
 
         // Direct JSON payload import via HTTP POST

@@ -24,3 +24,9 @@ Desktop.ini
 # Local Runner Wrapper
 powershell.cmd
 
+# Raw legacy dumps and local migration bundles
+u976858450_pass.sql
+data/
+
+
+
